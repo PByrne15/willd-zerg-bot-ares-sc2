@@ -39,10 +39,17 @@ class MacroController(Controller):
     def _gas_mining(self) -> None:
         workers_per_gas = 3
         if (
-            self.ai.pending_or_complete_upgrade(UpgradeId.ZERGGROUNDARMORSLEVEL3)
-            and self.ai.pending_or_complete_upgrade(UpgradeId.ZERGMELEEWEAPONSLEVEL3)
-        ) or (self.ai.minerals < 100 and self.ai.vespene > 300):
+            (
+                self.ai.pending_or_complete_upgrade(UpgradeId.ZERGGROUNDARMORSLEVEL3)
+                and self.ai.pending_or_complete_upgrade(
+                    UpgradeId.ZERGMELEEWEAPONSLEVEL3
+                )
+            )
+            or (self.ai.minerals < 100 and self.ai.vespene > 300)
+            or self.ai.controllers.being_rushed
+        ):
             workers_per_gas = 1
+
         self.ai.register_behavior(
             Mining(mineral_boost=True, workers_per_gas=workers_per_gas)
         )
@@ -91,6 +98,13 @@ class MacroController(Controller):
             )
 
     def _calculate_max_workers(self) -> int:
+        if self.ai.controllers.being_rushed:
+            if self.ai.controllers.under_attack_timer:
+                worker_count = 16
+            else:
+                worker_count = 28
+            return worker_count
+
         try:
             if not self.ai.structures(UnitTypeId.SPAWNINGPOOL):
                 worker_count = 14
@@ -160,6 +174,7 @@ class MacroController(Controller):
                 + self.ai.already_pending(UnitTypeId.QUEEN)
                 >= 3
             )
+            and not self.ai.controllers.being_rushed
         ):
             if self.ai.can_afford(UnitTypeId.EVOLUTIONCHAMBER):
                 self.ai.register_behavior(
@@ -204,6 +219,11 @@ class MacroController(Controller):
             )
 
     def _expansions(self) -> None:
+        if self.ai.controllers.being_rushed:
+            self.ai.register_behavior(
+                FixedExpansionController(to_count=2, max_pending=1)
+            )
+            return
         if self.ai.time < 900:
             if self.ai.minerals > 1000:
                 max_pending = 10
@@ -253,6 +273,7 @@ class MacroController(Controller):
             self.ai.controllers.attacks != 1
             or self.ai.townhalls.amount >= 3
             or under_attack
+            or self.ai.controllers.being_rushed
         ):
             if self.ai.supply_workers >= worker_count or under_attack:
                 self._macro_plan.add(

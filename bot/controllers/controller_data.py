@@ -31,7 +31,9 @@ class ControllerData:
             local_funcs.remove(interface)
 
         # And that we don't have any interfaces that shouldn't be defined
-        assert not any(f for f in local_funcs if not f.startswith("_"))
+        if any(f for f in local_funcs if not f.startswith("_")):
+            print(local_funcs)
+            assert not any(f for f in local_funcs if not f.startswith("_"))
 
     # AttackController interfaces
     @property
@@ -93,3 +95,8 @@ class ControllerData:
     # QueenController interfaces
     def assign_queen_default(self, queen: Unit) -> None:
         return self.interfaces["assign_queen_default"](queen)
+
+    # GameStateController interfaces
+    @property
+    def being_rushed(self) -> bool:
+        return self.interfaces["being_rushed"]()

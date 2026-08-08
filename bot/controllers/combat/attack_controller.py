@@ -251,6 +251,8 @@ class AttackController(Controller):
             return self.ai.enemy_start_locations[0]
 
         closest_unit = enemy_units.closest_to(unit) if enemy_units else None
+        if closest_unit and closest_unit.type_id in CHANGELING_TYPES:
+            return closest_unit
 
         if (
             (enemy_units and combat_sim_result in VICTORY_CLOSE_OR_BETTER)

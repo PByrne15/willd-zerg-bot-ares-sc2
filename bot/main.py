@@ -10,6 +10,7 @@ from bot.controllers import (
     AttackController,
     CreepController,
     DefendController,
+    GameStateController,
     InjectController,
     MacroController,
     QueenController,
@@ -45,6 +46,7 @@ class WilldZergBot(AresBot):
         # so if there are dependencies make sure they're in the right order
         self.controller_list: list[Controller] = []
 
+        self.controller_list.append(GameStateController(self))
         self.controller_list.append(ScoutController(self))
         self.controller_list.append(AttackController(self))
         self.controller_list.append(DefendController(self))
@@ -129,6 +131,7 @@ class WilldZergBot(AresBot):
             stats.sort_stats("cumulative")
             stats.print_stats(0.1)
             stats.print_stats("controllers")
+            print(self.step_time)
 
         # async def on_building_construction_complete(self, unit: Unit) -> None:
         #     await super(MyBot, self).on_building_construction_complete(unit)

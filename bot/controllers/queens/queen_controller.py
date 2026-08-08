@@ -51,6 +51,16 @@ class QueenController(Controller):
                 UseTransfuse(q, all_queens + defensive_structures)
             )
 
+    def _transition_inject_queens_to_defensive(self) -> None:
+        inject_queens = self.ai.mediator.get_units_from_role(
+            role=UnitRole.QUEEN_INJECT, unit_type=UnitTypeId.QUEEN
+        )
+        if inject_queens:
+            print(f"Changing inject queens to defensive @ {self.ai.time_formatted}")
+        for q in inject_queens:
+            self.ai.controllers.remove_inject_queen(q)
+            self.ai.mediator.assign_role(tag=q.tag, role=UnitRole.DEFENDING)
+
     def _transition_creep_queens_to_defensive(self) -> None:
         creep_queens = self.ai.mediator.get_units_from_role(
             role=UnitRole.QUEEN_CREEP, unit_type=UnitTypeId.QUEEN
@@ -75,6 +85,8 @@ class QueenController(Controller):
 
         if self.ai.controllers.under_attack_timer > 1:
             self._transition_creep_queens_to_defensive()
+            if self.ai.controllers.being_rushed:
+                self._transition_inject_queens_to_defensive()
         else:
             self._transition_defensive_queens_to_default()
 
