@@ -100,7 +100,7 @@ class AttackController(Controller):
             )
         ):
             self._skip_first_attack = True
-            print("Scouted a cannon so skipping first timing attack")
+            print("Scouted a cannon or wall so skipping first timing attack")
             return
 
         if self.ai.actual_iteration == self._trigger_attack_time + 100:
@@ -212,18 +212,21 @@ class AttackController(Controller):
             self.ai.register_behavior(maneuver)
 
     def _cleanup(self) -> None:
-        # Clear up population space
-        lings: Units = self.ai.units(UnitTypeId.ZERGLING)
-        interval = self.ai.controllers.ling_micro_interval
-        iteration_mod = self.ai.actual_iteration % interval
-        lings_this_iteration = [a for a in lings if a.tag % interval == iteration_mod]
+        # Clear up population space once spire is built
+        if self.ai.structures(UnitTypeId.SPIRE).ready:
+            lings: Units = self.ai.units(UnitTypeId.ZERGLING)
+            interval = self.ai.controllers.ling_micro_interval
+            iteration_mod = self.ai.actual_iteration % interval
+            lings_this_iteration = [
+                a for a in lings if a.tag % interval == iteration_mod
+            ]
 
-        if lings.amount > 20:
-            for ling in lings_this_iteration:
-                if ling.is_idle:
-                    lings_without_self = lings.copy()
-                    lings_without_self.remove(ling)
-                    ling.attack(lings_without_self.closest_to(ling))
+            if lings.amount > 20:
+                for ling in lings_this_iteration:
+                    if ling.is_idle:
+                        lings_without_self = lings.copy()
+                        lings_without_self.remove(ling)
+                        ling.attack(lings_without_self.closest_to(ling))
 
         mutas: Units = self.ai.units(UnitTypeId.MUTALISK)
         if not mutas:

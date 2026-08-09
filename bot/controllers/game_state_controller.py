@@ -30,8 +30,9 @@ class GameStateController(Controller):
         if self._cleanup:
             return
 
-        if self.ai.supply_used <= 190 or not all(
-            self.ai.is_visible(exp) for exp in self.ai.expansion_locations_list
+        if self.ai.supply_used <= 190 or (
+            not all(self.ai.is_visible(exp) for exp in self.ai.expansion_locations_list)
+            and self.ai.time < 1200
         ):
             self._cleanup = False
             return
