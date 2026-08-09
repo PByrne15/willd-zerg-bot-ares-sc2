@@ -82,9 +82,9 @@ class AttackController(Controller):
         lings = self.ai.mediator.get_own_army_dict[UnitTypeId.ZERGLING]
         _, num_units = cy_find_units_center_mass(lings, 3)
         cancel_attack = (
-            self.ai.enemy_units.closer_than(40, self.ai.enemy_start_locations[0])
-            .filter(lambda u: not u.type_id in self.ai.WORKER_TYPES)
-            .amount
+            self.ai.enemy_units.filter(
+                lambda u: not u.type_id in self.ai.WORKER_TYPES
+            ).amount
             > 1
             or self.ai.enemy_structures.filter(
                 lambda u: u.type_id is UnitTypeId.PHOTONCANNON and u.is_ready

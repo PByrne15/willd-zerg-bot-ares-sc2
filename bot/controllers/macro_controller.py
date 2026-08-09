@@ -101,8 +101,10 @@ class MacroController(Controller):
         if self.ai.controllers.being_rushed:
             if self.ai.controllers.under_attack_timer:
                 worker_count = 16
+            elif self.ai.enemy_units.closer_than(40, self.ai.mediator.get_own_nat):
+                worker_count = 22
             else:
-                worker_count = 28
+                worker_count = 26
             return worker_count
 
         try:
