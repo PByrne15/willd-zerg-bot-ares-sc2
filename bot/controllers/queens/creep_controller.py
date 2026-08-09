@@ -67,6 +67,10 @@ class CreepController(Controller):
             self.ai.register_behavior(QueenSpreadCreep(queen_unit))
 
     def _tumor_spread_creep(self, target: Point2 | None = None) -> None:
+        # This is surprisingly painful for performance so only do it every 10 iterations
+        if self.ai.actual_iteration % 10:
+            return
+
         tumors = self.ai.structures(UnitTypeId.CREEPTUMORBURROWED)
         for tumor in tumors:
             if not target:
@@ -74,6 +78,10 @@ class CreepController(Controller):
             self.ai.register_behavior(TumorSpreadCreep(tumor, target))
 
     def _maybe_build_queen(self, th: Unit) -> None:
+        # This is surprisingly painful for performance so only do it every 10 iterations
+        if self.ai.actual_iteration % 10:
+            return
+
         total_queens = self.ai.units(UnitTypeId.QUEEN)
         if (
             total_queens.amount >= MIN_QUEENS_BEFORE_CREEP

@@ -156,9 +156,20 @@ class ScoutController(Controller):
             # If the scout died without reaching the nat a few times
             # then we will assume it has been taken
             if self._nat_scout_attempts >= 3:
-                print("Reached limit for scouting natural, assuming it has been taken")
-                self._scouting_natural = False
-                self._enemy_nat_taken = True
+                if not self.ai.controllers.was_rushed:
+                    print(
+                        "Reached limit for scouting natural, assuming it has been taken"
+                    )
+                    self._scouting_natural = False
+                    self._enemy_nat_taken = True
+                else:
+                    print(
+                        "Reached limit for scouting natural, but were being rushed. Will not assume it was taken until 7 minutes"
+                    )
+                    self._scouting_natural = False
+
+        if not self._enemy_nat_taken and self.ai.time > 420:
+            self._enemy_nat_taken = True
 
     def _defending_overseer(self) -> None:
         if UpgradeId.ZERGMELEEWEAPONSLEVEL1 in self.ai.completed_researches:

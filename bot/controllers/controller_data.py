@@ -100,3 +100,11 @@ class ControllerData:
     @property
     def being_rushed(self) -> bool:
         return self.interfaces["being_rushed"]()
+
+    @property
+    def was_rushed(self) -> bool:
+        return self.interfaces["was_rushed"]()
+
+    @property
+    def cleanup(self) -> bool:
+        return self.interfaces["cleanup"]()

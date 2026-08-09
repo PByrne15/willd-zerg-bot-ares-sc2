@@ -3,6 +3,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from ares.behaviors.combat.combat_maneuver import CombatManeuver
+from ares.behaviors.combat.group import (
+    AMoveGroup,
+)
 from ares.behaviors.macro import UpgradeController
 from ares.consts import (
     CHANGELING_TYPES,
@@ -46,31 +49,6 @@ class AttackController(Controller):
         self._skip_first_attack = False
 
         self._attacker_com: Point2 = Point2((0, 0))
-
-    def trigger_attack(self, iteration: int) -> None:
-        self._trigger_attack_time = iteration
-
-    def set_under_attack_timer(self, timer: int) -> None:
-        self._under_attack_timer = timer
-
-    def under_attack_timer(self) -> int:
-        return self._under_attack_timer
-
-    def attacks(self) -> int:
-        return self._attacks
-
-    def attacker_com(self) -> Point2:
-        return self._attacker_com
-
-    def skip_first_attack(self) -> bool:
-        return self._skip_first_attack
-
-    def ling_micro_interval(self) -> int:
-        return max(
-            1,
-            # math.ceil equivalent that stays in integer domain so is more performant
-            -(self.ai.units(UnitTypeId.ZERGLING).amount // -MAX_ZERGLING_COMMANDS),
-        )
 
     async def start(self) -> None:
         self._attacker_com = self.ai.expansion_entrance
@@ -233,17 +211,60 @@ class AttackController(Controller):
 
             self.ai.register_behavior(maneuver)
 
-    async def update(self) -> None:
-        self._manage_first_attack()
-        await self._timing_attacks()
-        self._other_attacks()
+    def _cleanup(self) -> None:
+        # Clear up population space
+        lings: Units = self.ai.units(UnitTypeId.ZERGLING)
+        interval = self.ai.controllers.ling_micro_interval
+        iteration_mod = self.ai.actual_iteration % interval
+        lings_this_iteration = [a for a in lings if a.tag % interval == iteration_mod]
 
-        self._attack_behaviour()
+        if lings.amount > 20:
+            for ling in lings_this_iteration:
+                if ling.is_idle:
+                    lings_without_self = lings.copy()
+                    lings_without_self.remove(ling)
+                    ling.attack(lings_without_self.closest_to(ling))
+
+        mutas: Units = self.ai.units(UnitTypeId.MUTALISK)
+        if not mutas:
+            return
+
+        if self.ai.enemy_units:
+            if not self.ai.actual_iteration % 50:
+                print(f"Mutas attacking a unit @ {self.ai.time_formatted}")
+            self.ai.register_behavior(
+                AMoveGroup(
+                    mutas,
+                    {m.tag for m in mutas},
+                    self.ai.enemy_units.closest_to(self.ai.start_location).position,
+                )
+            )
+        elif self.ai.enemy_structures:
+            if not self.ai.actual_iteration % 50:
+                print(f"Mutas attacking a structure @ {self.ai.time_formatted}")
+            self.ai.register_behavior(
+                AMoveGroup(
+                    mutas,
+                    {m.tag for m in mutas},
+                    self.ai.enemy_structures.closest_to(self.ai.start_location),
+                )
+            )
+        else:
+            if not self.ai.actual_iteration % 50:
+                print(f"Mutas exploring @ {self.ai.time_formatted}")
+            for muta in mutas:
+                if muta.is_idle:
+                    new_x = random.random() * self.ai.game_info.map_size.width
+                    new_y = random.random() * self.ai.game_info.map_size.height
+                    new_position: Point2 = Point2((new_x, new_y))
+                    muta.move(new_position)
 
     def _decide_attack_target(
         self, combat_sim_result: EngagementResult, unit: Unit, enemy_units: Units
     ) -> Point2 | Unit:
-        enemy_structures: Units = self.ai.enemy_structures
+        enemy_structures: Units = self.ai.enemy_structures.filter(
+            lambda s: not s.is_flying
+        )
         current_target = unit.order_target
 
         # First attack should always go to enemy base
@@ -275,3 +296,38 @@ class AttackController(Controller):
             return random.choice(self.ai.expansion_locations_list)
         else:
             return self.ai.enemy_start_locations[0]
+
+    async def update(self) -> None:
+        self._manage_first_attack()
+        await self._timing_attacks()
+        self._other_attacks()
+
+        if self.ai.controllers.cleanup:
+            self._cleanup()
+        else:
+            self._attack_behaviour()
+
+    def trigger_attack(self, iteration: int) -> None:
+        self._trigger_attack_time = iteration
+
+    def set_under_attack_timer(self, timer: int) -> None:
+        self._under_attack_timer = timer
+
+    def under_attack_timer(self) -> int:
+        return self._under_attack_timer
+
+    def attacks(self) -> int:
+        return self._attacks
+
+    def attacker_com(self) -> Point2:
+        return self._attacker_com
+
+    def skip_first_attack(self) -> bool:
+        return self._skip_first_attack
+
+    def ling_micro_interval(self) -> int:
+        return max(
+            1,
+            # math.ceil equivalent that stays in integer domain so is more performant
+            -(self.ai.units(UnitTypeId.ZERGLING).amount // -MAX_ZERGLING_COMMANDS),
+        )

@@ -43,6 +43,10 @@ class InjectController(Controller):
                 self._inject_dict[th] = None
 
     def _maybe_build_queen(self, th: Unit) -> None:
+        # This is surprisingly painful for performance so only do it every 10 iterations
+        if self.ai.actual_iteration % 10:
+            return
+
         inject_queens = [q for q in self._inject_dict.values() if q]
         building_queens = self.ai.units(UnitTypeId.QUEEN).not_ready
         if (

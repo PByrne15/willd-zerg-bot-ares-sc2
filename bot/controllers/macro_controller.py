@@ -40,14 +40,18 @@ class MacroController(Controller):
         workers_per_gas = 3
         if (
             (
-                self.ai.pending_or_complete_upgrade(UpgradeId.ZERGGROUNDARMORSLEVEL3)
-                and self.ai.pending_or_complete_upgrade(
-                    UpgradeId.ZERGMELEEWEAPONSLEVEL3
+                (
+                    self.ai.pending_or_complete_upgrade(
+                        UpgradeId.ZERGGROUNDARMORSLEVEL3
+                    )
+                    and self.ai.pending_or_complete_upgrade(
+                        UpgradeId.ZERGMELEEWEAPONSLEVEL3
+                    )
                 )
+                or self.ai.controllers.being_rushed
             )
-            or (self.ai.minerals < 100 and self.ai.vespene > 300)
-            or self.ai.controllers.being_rushed
-        ):
+            and not self.ai.controllers.cleanup
+        ) or (self.ai.minerals < 200 and self.ai.vespene > 300):
             workers_per_gas = 1
 
         self.ai.register_behavior(
@@ -55,10 +59,13 @@ class MacroController(Controller):
         )
 
     def _extractor_building(self) -> None:
-        if self.ai.structures(UnitTypeId.SPAWNINGPOOL) and self.ai.supply_workers == 14:
+        if self.ai.controllers.cleanup:
+            self.ai.register_behavior(GasBuildingController(to_count=10, max_pending=8))
+        elif (
+            self.ai.structures(UnitTypeId.SPAWNINGPOOL) and self.ai.supply_workers == 14
+        ):
             self.ai.register_behavior(GasBuildingController(to_count=1))
-
-        if (
+        elif (
             self.ai.controllers.attacks
             and not UpgradeId.ZERGGROUNDARMORSLEVEL1 in self.ai.completed_researches
             and self.ai.townhalls.amount >= 3
@@ -252,26 +259,29 @@ class MacroController(Controller):
                 )
             )
 
-    async def update(self) -> None:
+    def _cleanup(self) -> None:
+        if self.ai.controllers.cleanup:
+            self.ai.register_behavior(
+                BuildStructure(
+                    base_location=self._hq.position,
+                    structure_id=UnitTypeId.SPIRE,
+                    to_count=1,
+                    max_on_route=1,
+                )
+            )
+
+    def _production(self, worker_count: int) -> None:
         under_attack = bool(self.ai.controllers.under_attack_timer)
-        self._macro_plan = MacroPlan()
-
-        if not self.ai.townhalls:
-            return
-
-        self._hq = self.ai.townhalls.closest_to(self.ai.start_location)
-        if not self._hq:
-            self._hq = self.ai.townhalls.first
-
-        self._gas_mining()
-        self._extractor_building()
-        self._build_spawning_pool()
-        self._build_overlords()
-
-        worker_count = self._calculate_max_workers()
-
+        if self.ai.controllers.cleanup:
+            self._macro_plan.add(
+                SpawnController(
+                    army_composition_dict={
+                        UnitTypeId.MUTALISK: {"proportion": 1.0, "priority": 0}
+                    }
+                )
+            )
         # After first attack stop production until we have 3 hatcheries
-        if (
+        elif (
             self.ai.controllers.attacks != 1
             or self.ai.townhalls.amount >= 3
             or under_attack
@@ -288,11 +298,31 @@ class MacroController(Controller):
             else:
                 self._macro_plan.add(BuildWorkers(to_count=worker_count))
 
+    async def update(self) -> None:
+        self._macro_plan = MacroPlan()
+
+        if not self.ai.townhalls:
+            return
+
+        self._hq = self.ai.townhalls.closest_to(self.ai.start_location)
+        if not self._hq:
+            self._hq = self.ai.townhalls.first
+
+        self._gas_mining()
+        self._extractor_building()
+        self._build_spawning_pool()
+        self._build_overlords()
+
+        worker_count = self._calculate_max_workers()
+
+        self._production(worker_count)
+
         self._zergling_speed()
         self._tech_to_lair()
         self._tech_to_hive()
         self._manage_upgrades()
         self._expansions()
         self._macro_hatcheries()
+        self._cleanup()
 
         self.ai.register_behavior(self._macro_plan)
