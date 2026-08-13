@@ -61,7 +61,10 @@ class AttackController(Controller):
         _, num_units = cy_find_units_center_mass(lings, 3)
         cancel_attack = (
             self.ai.enemy_units.filter(
-                lambda u: not u.type_id in self.ai.WORKER_TYPES
+                lambda u: (
+                    not u.type_id in self.ai.WORKER_TYPES
+                    and not u.type_id in COMMON_UNIT_IGNORE_TYPES
+                )
             ).amount
             > 1
             or self.ai.enemy_structures.filter(

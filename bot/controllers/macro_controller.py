@@ -54,6 +54,9 @@ class MacroController(Controller):
         ) or (self.ai.minerals < 200 and self.ai.vespene > 300):
             workers_per_gas = 1
 
+        if self.ai.supply_workers < 8:
+            workers_per_gas = 0
+
         self.ai.register_behavior(
             Mining(mineral_boost=True, workers_per_gas=workers_per_gas)
         )

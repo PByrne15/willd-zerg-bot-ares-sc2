@@ -59,6 +59,20 @@ class DefendController(Controller):
                     and u.can_be_attacked
                 )
             )
+            close_structs: Units = self.ai.enemy_structures.in_distance_of_group(
+                self.ai.townhalls, 20
+            ).filter(
+                lambda s: (
+                    s.type_id
+                    in {
+                        UnitTypeId.BUNKER,
+                        UnitTypeId.PLANETARYFORTRESS,
+                        UnitTypeId.SPINECRAWLER,
+                        UnitTypeId.PHOTONCANNON,
+                    }
+                )
+            )
+            close_units = close_units + close_structs
         else:
             # We've almost certainly lost so just have some behaviour to not crash
             close_units = self.ai.enemy_units
