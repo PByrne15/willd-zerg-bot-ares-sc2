@@ -423,7 +423,7 @@ class MacroController(Controller):
             and not self.ai.controllers.being_spine_rushed
         ):
             pos = self.ai.mediator.get_closest_creep_tile(
-                pos=self.ai.controllers.defend_point
+                pos=self.ai.expansion_entrance
             )
             if not pos:
                 return

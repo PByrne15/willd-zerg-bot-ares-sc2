@@ -17,6 +17,9 @@ from bot.behaviour_overwrite import (
     PathUnitToTarget,
 )
 from bot.controllers.controller import Controller
+from cython_extensions.units_utils import (
+    cy_find_units_center_mass,
+)
 from sc2.units import Point2, Unit, Units, UnitTypeId
 
 if TYPE_CHECKING:
@@ -41,6 +44,14 @@ class DefendController(Controller):
     def _set_defend_point(self) -> None:
         if not self.ai.townhalls:
             self._defend_point = self.ai.start_location
+        elif (
+            self.ai.structures(UnitTypeId.SPINECRAWLER).amount > 0
+            and self.ai.townhalls.amount < 3
+        ):
+            pos, _ = cy_find_units_center_mass(
+                self.ai.structures(UnitTypeId.SPINECRAWLER), 5
+            )
+            self._defend_point = Point2(pos)
         elif self.ai.townhalls.amount < 3:
             self._defend_point = self.ai.expansion_entrance
         else:
