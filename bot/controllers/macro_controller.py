@@ -138,7 +138,7 @@ class MacroController(Controller):
                 )
             else:
                 worker_count = min(
-                    self.ai.supply_used - 16 * int(math.log(self.ai.supply_used)), 75
+                    self.ai.supply_used - 16 * int(math.log(self.ai.supply_used)), 80
                 )
         except ValueError:
             # This is possible if we're taking the log of 0

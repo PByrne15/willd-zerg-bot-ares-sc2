@@ -61,8 +61,8 @@ class WilldZergBot(AresBot):
             await controller.start()
 
     async def on_start(self) -> None:
-        apply_map_fixes(self)
         await super().on_start()
+        apply_map_fixes(self)
         """
         This code runs once at the start of the game
         Do things here before the game starts
@@ -99,6 +99,12 @@ class WilldZergBot(AresBot):
 
     async def on_step(self, iteration: int) -> None:
         await super().on_step(iteration)
+        if self.time >= 270:
+            self.supply_workers = self.mediator.get_own_unit_count(
+                unit_type_id=UnitTypeId.DRONE, include_pending=True
+            )
+            if not self.actual_iteration % 100:
+                print(f"{self.supply_workers=}")
         """
         This code runs continually throughout the game
         Populate this function with whatever your bot should do!

@@ -4,6 +4,7 @@ import numpy as np
 from ares.behaviors.combat.combat_maneuver import CombatManeuver
 from ares.consts import (
     COMMON_UNIT_IGNORE_TYPES,
+    LOSS_DECISIVE_OR_WORSE,
     LOSS_MARGINAL_OR_WORSE,
     VICTORY_DECISIVE_OR_BETTER,
     EngagementResult,
@@ -89,7 +90,7 @@ class DefendController(Controller):
         self.ai.register_behavior(maneuver)
 
     def _revert_attackers_to_defenders(
-        self, defenders: Units, combat_sim_result: EngagementResult, units: Units
+        self, defenders: Units, combat_sim_result: EngagementResult, enemy_units: Units
     ) -> None:
         attackers = self.ai.mediator.get_units_from_role(
             role=UnitRole.ATTACKING_MAIN_SQUAD
@@ -102,7 +103,7 @@ class DefendController(Controller):
         ):
             all_units = attackers + defenders
             new_combat_sim_result: EngagementResult = self.ai.mediator.can_win_fight(
-                own_units=all_units, enemy_units=units
+                own_units=all_units, enemy_units=enemy_units
             )
             if new_combat_sim_result is VICTORY_DECISIVE_OR_BETTER:
                 print("Setting attackers to defend")
@@ -141,6 +142,21 @@ class DefendController(Controller):
         maneuver.add(AMove(unit=defender, target=self._defend_point))
         self.ai.register_behavior(maneuver)
 
+    async def _check_for_overwhelming_enemy(self, defenders: Units) -> None:
+        enemy_units = self.ai.enemy_units()
+        combat_sim_result: EngagementResult = self.ai.mediator.can_win_fight(
+            own_units=defenders, enemy_units=enemy_units
+        )
+        if (
+            combat_sim_result in LOSS_DECISIVE_OR_WORSE
+            and not self.ai.controllers.under_attack_timer
+        ):
+            self.ai.controllers.set_under_attack_timer(1)
+            if not self.ai.actual_iteration % 50:
+                print(
+                    f"Cutting workers as overwhelming enemy scouted @ {self.ai.time_formatted}"
+                )
+
     async def update(self) -> None:
         ground_grid: np.ndarray = self.ai.mediator.get_ground_grid
         defenders: Units = self.ai.mediator.get_units_from_role(role=UnitRole.DEFENDING)
@@ -167,3 +183,5 @@ class DefendController(Controller):
             self._defensive_behaviour(
                 defender, defenders, close_units, combat_sim_result, ground_grid
             )
+
+        await self._check_for_overwhelming_enemy(defenders)

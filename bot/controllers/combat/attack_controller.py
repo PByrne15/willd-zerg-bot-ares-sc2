@@ -53,8 +53,20 @@ class AttackController(Controller):
     async def start(self) -> None:
         self._attacker_com = self.ai.expansion_entrance
 
+    def _cancel_rally(self) -> None:
+        rallying_lings = self.ai.mediator.get_units_from_role(
+            role=UnitRole.ATTACKING_MAIN_SQUAD
+        ).filter(lambda l: not l.position.distance_to_closest(self.ai.enemy_units) < 10)
+        if rallying_lings:
+            self.ai.mediator.batch_assign_role(
+                tags={l.tag for l in rallying_lings}, role=UnitRole.DEFENDING
+            )
+            print(f"Cancelling attack @ {self.ai.time_formatted}")
+
     def _manage_first_attack(self) -> None:
         if self._attacks > 0 or self._skip_first_attack:
+            if self._attacks == 0:
+                self._cancel_rally()
             return
 
         lings = self.ai.mediator.get_own_army_dict[UnitTypeId.ZERGLING]
@@ -79,14 +91,7 @@ class AttackController(Controller):
             )
 
         if cancel_attack:
-            attacking_lings = self.ai.mediator.get_units_from_role(
-                role=UnitRole.ATTACKING_MAIN_SQUAD
-            )
-            if attacking_lings:
-                self.ai.mediator.batch_assign_role(
-                    tags={l.tag for l in attacking_lings}, role=UnitRole.DEFENDING
-                )
-                print("Cancelling first attack")
+            self._cancel_rally()
 
     async def _timing_attacks(self) -> None:
         # If we've seen a cannon or a full wall at the top of the ramp
