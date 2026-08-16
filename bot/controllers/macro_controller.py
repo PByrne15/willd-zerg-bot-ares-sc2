@@ -57,7 +57,10 @@ class MacroController(Controller):
         ) or (self.ai.minerals < 200 and self.ai.vespene > 300):
             workers_per_gas = 1
 
-        if self.ai.supply_workers < 8:
+        if self.ai.supply_workers < 8 or (
+            self.ai.supply_workers < 16
+            and self.ai.pending_or_complete_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED)
+        ):
             workers_per_gas = 0
 
         self.ai.register_behavior(
@@ -396,6 +399,7 @@ class MacroController(Controller):
             < 3 + self.ai.controllers.enemy_late_nat
             and self.ai.can_afford(UnitTypeId.SPINECRAWLER)
             and self.ai.structures(UnitTypeId.SPAWNINGPOOL).ready
+            and self.ai.supply_workers >= 14
         ):
             await self._build_structure(UnitTypeId.SPINECRAWLER, spine_location, 9)
 

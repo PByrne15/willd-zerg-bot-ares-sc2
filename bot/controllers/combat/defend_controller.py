@@ -226,4 +226,6 @@ class DefendController(Controller):
                 defender, defenders, close_units, combat_sim_result, ground_grid
             )
 
+        self._set_defend_point()
+
         await self._check_for_overwhelming_enemy(defenders)

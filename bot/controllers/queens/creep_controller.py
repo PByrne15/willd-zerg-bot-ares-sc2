@@ -84,7 +84,21 @@ class CreepController(Controller):
 
         total_queens = self.ai.units(UnitTypeId.QUEEN)
         if (
-            total_queens.amount >= MIN_QUEENS_BEFORE_CREEP
+            (
+                total_queens.amount >= MIN_QUEENS_BEFORE_CREEP
+                or (
+                    self.ai.controllers.being_rushed
+                    and len(
+                        self.ai.mediator.get_own_structures_dict[
+                            UnitTypeId.SPINECRAWLER
+                        ]
+                        + self.ai.mediator.get_own_structures_dict[
+                            UnitTypeId.SPINECRAWLERUPROOTED
+                        ]
+                    )
+                    >= 3
+                )
+            )
             and th.is_idle
             and self.ai.structures(UnitTypeId.SPAWNINGPOOL).ready
             and (
