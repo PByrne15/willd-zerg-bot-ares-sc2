@@ -97,6 +97,7 @@ class ScoutController(Controller):
     def _scout_for_natural(self) -> None:
         if not self._enemy_nat_taken and self.ai.time > 420:
             self._enemy_nat_taken = True
+            self._scouting_natural = False
 
         enemy_nat = self.ai.mediator.get_enemy_nat
         if self.enemy_nat_taken():

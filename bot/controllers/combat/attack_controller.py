@@ -56,7 +56,12 @@ class AttackController(Controller):
     def _cancel_rally(self) -> None:
         rallying_lings = self.ai.mediator.get_units_from_role(
             role=UnitRole.ATTACKING_MAIN_SQUAD
-        ).filter(lambda l: not l.position.distance_to_closest(self.ai.enemy_units) < 10)
+        ).filter(
+            lambda l: (
+                self.ai.enemy_units
+                and not l.position.distance_to_closest(self.ai.enemy_units) < 10
+            )
+        )
         if rallying_lings:
             self.ai.mediator.batch_assign_role(
                 tags={l.tag for l in rallying_lings}, role=UnitRole.DEFENDING

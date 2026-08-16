@@ -108,3 +108,11 @@ class ControllerData:
     @property
     def cleanup(self) -> bool:
         return self.interfaces["cleanup"]()
+
+    @property
+    def enemy_late_nat(self) -> int:
+        return self.interfaces["enemy_late_nat"]()
+
+    @property
+    def being_spine_rushed(self) -> bool:
+        return self.interfaces["being_spine_rushed"]()

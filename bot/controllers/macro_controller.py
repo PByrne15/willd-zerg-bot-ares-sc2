@@ -13,11 +13,14 @@ from ares.behaviors.macro import (
     TechUp,
     UpgradeController,
 )
+from ares.consts import UnitRole
 from bot.controllers.controller import Controller
 from bot.expansion_controller import FixedExpansionController
+from cython_extensions import cy_distance_to_squared, cy_towards
+from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
-from sc2.units import Unit
+from sc2.units import Point2, Unit, Units
 
 if TYPE_CHECKING:
     from bot.main import WilldZergBot
@@ -60,6 +63,29 @@ class MacroController(Controller):
         self.ai.register_behavior(
             Mining(mineral_boost=True, workers_per_gas=workers_per_gas)
         )
+
+    async def _build_structure(
+        self,
+        structure_type: UnitTypeId,
+        pos: Point2,
+        max_distance: int = 20,
+        random_alternative: bool = True,
+    ) -> None:
+        build_pos: Point2 | None = await self.ai.find_placement(
+            structure_type,
+            pos,
+            random_alternative=random_alternative,
+            max_distance=max_distance,
+        )
+        if build_pos and self.ai.mediator.is_position_safe(
+            grid=self.ai.mediator.get_ground_grid, position=build_pos
+        ):
+            worker = self.ai.mediator.select_worker(target_position=build_pos)
+            if worker:
+                self.ai.mediator.build_with_specific_worker(
+                    worker=worker, structure_type=structure_type, pos=build_pos
+                )
+                self.ai.mediator.assign_role(tag=worker.tag, role=UnitRole.BUILDING)
 
     def _extractor_building(self) -> None:
         if self.ai.controllers.cleanup:
@@ -231,6 +257,8 @@ class MacroController(Controller):
             )
 
     def _expansions(self) -> None:
+        if self.ai.mediator.get_enemy_worker_rushed and self.ai.time < 150:
+            return
         if self.ai.controllers.being_rushed:
             self.ai.register_behavior(
                 FixedExpansionController(to_count=2, max_pending=1)
@@ -301,6 +329,141 @@ class MacroController(Controller):
             else:
                 self._macro_plan.add(BuildWorkers(to_count=worker_count))
 
+    async def _build_spines(self) -> None:
+        if (
+            self.ai.mediator.get_building_counter[UnitTypeId.SPINECRAWLER] >= 2
+        ) or self.ai.supply_used > 80:
+            return
+
+        spine_count: int = 2
+        if self.ai.controllers.being_spine_rushed or (
+            self.ai.mediator.get_enemy_worker_rushed and self.ai.time < 210
+        ):
+            enemy_structs = self.ai.enemy_structures()
+            if enemy_structs and enemy_structs.closer_than(20, self.ai.start_location):
+                enemy_proxy = enemy_structs.closer_than(
+                    20, self.ai.start_location
+                ).closest_to(self.ai.start_location)
+                spine_location: Point2 = Point2(
+                    cy_towards(self.ai.start_location, enemy_proxy.position, 3)
+                )
+            else:
+                spine_location: Point2 = Point2(
+                    cy_towards(self.ai.start_location, self.ai.mediator.get_own_nat, 3)
+                )
+        elif self.ai.controllers.being_rushed:
+            spine_location: Point2 = Point2(
+                cy_towards(
+                    self.ai.mediator.get_own_nat, self.ai.game_info.map_center, 3
+                )
+            )
+            spine_count = 3
+        elif self.ai.controllers.enemy_late_nat:
+            loc = self.ai.mediator.get_closest_creep_tile(
+                pos=self.ai.expansion_entrance
+            )
+            if not loc:
+                return
+            spine_location: Point2 = loc
+            spine_count = 2 + self.ai.controllers.enemy_late_nat
+        else:
+            return
+
+        existing_spines: list[Unit] = [
+            s
+            for s in self.ai.mediator.get_own_structures_dict[UnitTypeId.SPINECRAWLER]
+            + self.ai.mediator.get_own_structures_dict[UnitTypeId.SPINECRAWLERUPROOTED]
+            if cy_distance_to_squared(s.position, spine_location) < 100.0
+        ]
+        if (
+            len(existing_spines) < spine_count
+            and len(
+                self.ai.mediator.get_own_structures_dict[UnitTypeId.SPINECRAWLER]
+                + self.ai.mediator.get_own_structures_dict[
+                    UnitTypeId.SPINECRAWLERUPROOTED
+                ]
+            )
+            < 3 + self.ai.controllers.enemy_late_nat
+            and self.ai.can_afford(UnitTypeId.SPINECRAWLER)
+            and self.ai.structures(UnitTypeId.SPAWNINGPOOL).ready
+        ):
+            await self._build_structure(UnitTypeId.SPINECRAWLER, spine_location, 9)
+
+    def _move_spines(self) -> None:
+        # Spines have a habit of getting in each other's way so move one at a time
+        uprooted_spines = [
+            s
+            for s in self.ai.mediator.get_own_structures_dict[
+                UnitTypeId.SPINECRAWLERUPROOTED
+            ]
+        ]
+        spines = Units(
+            [
+                s
+                for s in self.ai.mediator.get_own_structures_dict[
+                    UnitTypeId.SPINECRAWLER
+                ]
+            ],
+            self.ai,
+        )
+
+        enemy_units = self.ai.enemy_units
+        if (
+            not any(enemy_units.closer_than(40, th) for th in self.ai.townhalls)
+            and not self.ai.controllers.being_spine_rushed
+        ):
+            pos = self.ai.mediator.get_closest_creep_tile(
+                pos=self.ai.controllers.defend_point
+            )
+            if not pos:
+                return
+            for s in uprooted_spines:
+                if (
+                    s.is_using_ability(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT)
+                    or AbilityId.CANCEL_SPINECRAWLERROOT in s.abilities
+                ):
+                    continue
+                if cy_distance_to_squared(s.position, pos) <= 16:
+                    # print("Attempting to burrow spinecrawler")
+                    s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, s.position)
+                elif cy_distance_to_squared(s.position, pos) >= 16:
+                    # print("Trying to move Spinecrawler")
+                    s.move(pos)
+                return
+
+            if not spines:
+                return
+            s = spines.furthest_to(pos)
+            if (
+                not any(
+                    cy_distance_to_squared(th.position, pos) < 4
+                    for th in self.ai.townhalls
+                )
+                and cy_distance_to_squared(s.position, pos) > 25
+                and s.is_ready
+            ):
+                print("Trying to uproot Spinecrawler")
+                print(f"Distance squared = {cy_distance_to_squared(s.position, pos)=}")
+                s(AbilityId.SPINECRAWLERUPROOT_SPINECRAWLERUPROOT)
+                return
+        else:
+            for s in uprooted_spines:
+                pos = self.ai.mediator.get_closest_creep_tile(pos=s.position)
+                if not pos:
+                    return
+                if (
+                    s.is_using_ability(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT)
+                    or AbilityId.CANCEL_SPINECRAWLERROOT in s.abilities
+                ):
+                    continue
+                if cy_distance_to_squared(s.position, pos) < 2:
+                    print("Attempting to burrow spinecrawler 2")
+                    s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, pos)
+                else:
+                    print("Trying to move Spinecrawler 2")
+                    s.move(pos)
+                return
+
     async def update(self) -> None:
         self._macro_plan = MacroPlan()
 
@@ -311,6 +474,8 @@ class MacroController(Controller):
         if not self._hq:
             self._hq = self.ai.townhalls.first
 
+        await self._build_spines()
+        self._move_spines()
         self._gas_mining()
         self._extractor_building()
         self._build_spawning_pool()

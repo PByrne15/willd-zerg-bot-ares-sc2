@@ -7,6 +7,7 @@ from ares.consts import (
     LOSS_DECISIVE_OR_WORSE,
     LOSS_MARGINAL_OR_WORSE,
     VICTORY_DECISIVE_OR_BETTER,
+    WORKER_TYPES,
     EngagementResult,
     UnitRole,
 )
@@ -143,7 +144,11 @@ class DefendController(Controller):
         self.ai.register_behavior(maneuver)
 
     async def _check_for_overwhelming_enemy(self, defenders: Units) -> None:
-        enemy_units = self.ai.enemy_units()
+        if self.ai.controllers.attacks >= 2:
+            return
+        enemy_units = self.ai.enemy_units().filter(
+            lambda u: u.type_id not in WORKER_TYPES
+        )
         combat_sim_result: EngagementResult = self.ai.mediator.can_win_fight(
             own_units=defenders, enemy_units=enemy_units
         )
