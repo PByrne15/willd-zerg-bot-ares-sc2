@@ -95,6 +95,9 @@ class ScoutController(Controller):
         return self._enemy_nat_taken
 
     def _scout_for_natural(self) -> None:
+        if not self._enemy_nat_taken and self.ai.time > 420:
+            self._enemy_nat_taken = True
+
         enemy_nat = self.ai.mediator.get_enemy_nat
         if self.enemy_nat_taken():
             scouting_unit = self.ai.unit_tag_dict.get(self._nat_scout_unit)
@@ -167,9 +170,6 @@ class ScoutController(Controller):
                         "Reached limit for scouting natural, but were being rushed. Will not assume it was taken until 7 minutes"
                     )
                     self._scouting_natural = False
-
-        if not self._enemy_nat_taken and self.ai.time > 420:
-            self._enemy_nat_taken = True
 
     def _defending_overseer(self) -> None:
         if UpgradeId.ZERGMELEEWEAPONSLEVEL1 in self.ai.completed_researches:
