@@ -70,6 +70,7 @@ class DefendController(Controller):
                         UnitTypeId.BUNKER,
                         UnitTypeId.PLANETARYFORTRESS,
                         UnitTypeId.SPINECRAWLER,
+                        UnitTypeId.SPINECRAWLERUPROOTED,
                         UnitTypeId.PHOTONCANNON,
                     }
                 )
@@ -146,7 +147,7 @@ class DefendController(Controller):
     async def _check_for_overwhelming_enemy(self, defenders: Units) -> None:
         if self.ai.controllers.attacks >= 2:
             return
-        enemy_units = self.ai.enemy_units().filter(
+        enemy_units = self.ai.enemy_units.filter(
             lambda u: u.type_id not in WORKER_TYPES
         )
         combat_sim_result: EngagementResult = self.ai.mediator.can_win_fight(
@@ -162,6 +163,29 @@ class DefendController(Controller):
                     f"Cutting workers as overwhelming enemy scouted @ {self.ai.time_formatted}"
                 )
 
+    def _manage_worker_defense(self) -> None:
+        defending_workers = self.ai.mediator.get_units_from_role(
+            role=UnitRole.DEFENDING, unit_type=UnitTypeId.DRONE
+        )
+        if not self.ai.controllers.being_spine_rushed:
+            if defending_workers:
+                self.ai.mediator.batch_assign_role(
+                    tags={dw.tag for dw in defending_workers}, role=UnitRole.GATHERING
+                )
+                print("Workers returning to gathering")
+            return
+
+        num_workers_to_defend = 8
+
+        if not self.ai.enemy_structures:
+            return
+
+        if defending_workers.amount < num_workers_to_defend:
+            proxy_building = self.ai.enemy_structures.closest_to(self.ai.start_location)
+            worker = self.ai.mediator.select_worker(target_position=proxy_building)
+            if worker:
+                self.ai.mediator.assign_role(tag=worker.tag, role=UnitRole.DEFENDING)
+
     async def update(self) -> None:
         ground_grid: np.ndarray = self.ai.mediator.get_ground_grid
         defenders: Units = self.ai.mediator.get_units_from_role(role=UnitRole.DEFENDING)
@@ -170,6 +194,8 @@ class DefendController(Controller):
         defenders_this_iteration = [
             a for a in defenders if a.tag % interval == iteration_mod
         ]
+
+        self._manage_worker_defense()
 
         self._set_defend_point()
         close_units = self._get_close_units()

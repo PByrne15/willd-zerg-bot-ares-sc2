@@ -69,11 +69,15 @@ class GameStateController(Controller):
     def _set_being_spine_rushed(self) -> None:
         if self.ai.time > 240:
             self._being_spine_rushed = False
+
         spines = self.ai.enemy_structures(
             [UnitTypeId.SPINECRAWLER, UnitTypeId.SPINECRAWLERUPROOTED]
         )
         if spines and spines.closest_distance_to(self.ai.start_location) < 15:
             self._being_spine_rushed = True
+            self._was_rushed = True
+        elif self._being_spine_rushed:
+            self._being_spine_rushed = False
 
     async def update(self) -> None:
         self._set_was_rushed()

@@ -352,11 +352,21 @@ class MacroController(Controller):
                     cy_towards(self.ai.start_location, self.ai.mediator.get_own_nat, 3)
                 )
         elif self.ai.controllers.being_rushed:
-            spine_location: Point2 = Point2(
-                cy_towards(
-                    self.ai.mediator.get_own_nat, self.ai.game_info.map_center, 3
+            if (
+                self.ai.structures(UnitTypeId.HATCHERY)
+                .filter(lambda h: h.is_ready)
+                .amount
+                > 1
+            ):
+                spine_location: Point2 = Point2(
+                    cy_towards(
+                        self.ai.mediator.get_own_nat, self.ai.game_info.map_center, 3
+                    )
                 )
-            )
+            else:
+                spine_location: Point2 = Point2(
+                    cy_towards(self.ai.start_location, self.ai.mediator.get_own_nat, 3)
+                )
             spine_count = 3
         elif self.ai.controllers.enemy_late_nat:
             loc = self.ai.mediator.get_closest_creep_tile(
@@ -373,7 +383,7 @@ class MacroController(Controller):
             s
             for s in self.ai.mediator.get_own_structures_dict[UnitTypeId.SPINECRAWLER]
             + self.ai.mediator.get_own_structures_dict[UnitTypeId.SPINECRAWLERUPROOTED]
-            if cy_distance_to_squared(s.position, spine_location) < 100.0
+            if cy_distance_to_squared(s.position, spine_location) < 1600.0
         ]
         if (
             len(existing_spines) < spine_count
@@ -456,7 +466,7 @@ class MacroController(Controller):
                     or AbilityId.CANCEL_SPINECRAWLERROOT in s.abilities
                 ):
                     continue
-                if cy_distance_to_squared(s.position, pos) < 2:
+                if cy_distance_to_squared(s.position, pos) < 1:
                     print("Attempting to burrow spinecrawler 2")
                     s(AbilityId.SPINECRAWLERROOT_SPINECRAWLERROOT, pos)
                 else:

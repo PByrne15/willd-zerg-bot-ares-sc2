@@ -81,6 +81,7 @@ class AttackController(Controller):
                 lambda u: (
                     not u.type_id in self.ai.WORKER_TYPES
                     and not u.type_id in COMMON_UNIT_IGNORE_TYPES
+                    and not u.distance_to(self.ai.enemy_start_locations[0]) > 30
                 )
             ).amount
             > 1
