@@ -138,7 +138,7 @@ class MacroController(Controller):
 
     def _calculate_max_workers(self) -> int:
         if self.ai.controllers.being_rushed:
-            if self.ai.controllers.under_attack_timer:
+            if self.ai.controllers.under_attack_timer or self.ai.townhalls.amount == 1:
                 worker_count = 16
             elif self.ai.enemy_units.closer_than(40, self.ai.mediator.get_own_nat):
                 worker_count = 22
@@ -321,7 +321,9 @@ class MacroController(Controller):
             or under_attack
             or self.ai.controllers.being_rushed
         ):
-            if self.ai.supply_workers >= worker_count or under_attack:
+            if self.ai.supply_workers >= worker_count or (
+                under_attack and not self.ai.controllers.being_rushed
+            ):
                 self._macro_plan.add(
                     SpawnController(
                         army_composition_dict={

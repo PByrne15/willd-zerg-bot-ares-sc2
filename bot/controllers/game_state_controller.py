@@ -15,6 +15,8 @@ class GameStateController(Controller):
         self.ai = ai
 
         self._was_rushed = False
+        self._being_rushed = False
+        self._cancel_rush_timer = 0
         self._cleanup = False
         self._enemy_late_nat = 0
         self._being_spine_rushed = False
@@ -24,10 +26,32 @@ class GameStateController(Controller):
 
     def _set_was_rushed(self) -> None:
         if not self._was_rushed:
-            being_rushed = self.ai.mediator.get_did_enemy_rush
-            if being_rushed:
+            was_rushed = self.ai.mediator.get_did_enemy_rush
+            if was_rushed:
                 self._was_rushed = True
-                print("Detected that we're being rushed")
+                self._being_rushed = True
+                print(f"Detected that we're being rushed @ {self.ai.time_formatted}")
+
+    def _set_being_rushed(self) -> None:
+        # Early exit when not being rushed
+        if not self._was_rushed or (self._was_rushed and not self._being_rushed):
+            return
+
+        # Early exit when being rushed and it's before 4 minutes
+        if self.ai.time < 240:
+            return
+
+        # Check if rush is still going on after 4 minutes
+        if not self.ai.controllers.under_attack_timer:
+            if not self._cancel_rush_timer:
+                self._cancel_rush_timer = self.ai.time
+            else:
+                # If the under attack timer has been off for 25s we're no longer being rushed
+                if self._cancel_rush_timer + 25 <= self.ai.time:
+                    print(f"Cancelling being rushed state @ {self.ai.time_formatted}")
+                    self._being_rushed = False
+        elif self._cancel_rush_timer:
+            self._cancel_rush_timer = 0
 
     def _set_cleanup_state(self) -> None:
         if self._cleanup:
@@ -81,12 +105,13 @@ class GameStateController(Controller):
 
     async def update(self) -> None:
         self._set_was_rushed()
+        self._set_being_rushed()
         self._set_cleanup_state()
         self._set_enemy_late_nat()
         self._set_being_spine_rushed()
 
     def being_rushed(self) -> bool:
-        return self._was_rushed and self.ai.time < 270
+        return self._being_rushed
 
     def was_rushed(self) -> bool:
         return self._was_rushed

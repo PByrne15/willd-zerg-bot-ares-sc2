@@ -44,11 +44,16 @@ class QueenController(Controller):
         )
         all_queens = self.ai.units(UnitTypeId.QUEEN).ready
         defensive_structures = self.ai.structures(
-            [UnitTypeId.SPINECRAWLER, UnitTypeId.SPORECRAWLER]
+            [
+                UnitTypeId.SPINECRAWLER,
+                UnitTypeId.SPINECRAWLERUPROOTED,
+                UnitTypeId.SPORECRAWLER,
+                UnitTypeId.SPORECRAWLERUPROOTED,
+            ]
         )
         for q in defensive_queens:
             self.ai.register_behavior(
-                UseTransfuse(q, all_queens + defensive_structures)
+                UseTransfuse(q, all_queens + defensive_structures, 5)
             )
 
     def _transition_inject_queens_to_defensive(self) -> None:

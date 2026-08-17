@@ -136,6 +136,18 @@ class DefendController(Controller):
         nearby_friendlies = defenders.closer_than(
             20, close_units.closest_to(defender)
         ).amount
+        # Double count spine crawlers to encourage engaging near them
+        nearby_friendlies += (
+            self.ai.structures(UnitTypeId.SPINECRAWLER)
+            .filter(
+                lambda s: (
+                    s.is_ready
+                    and s.position.distance_to(close_units.closest_to(defender)) < 7
+                )
+            )
+            .amount
+            * 2
+        )
         nearby_enemies = close_units.closer_than(
             10, close_units.closest_to(defender)
         ).amount
