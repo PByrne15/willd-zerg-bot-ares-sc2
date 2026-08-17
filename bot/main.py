@@ -18,7 +18,7 @@ from bot.controllers import (
 )
 from bot.controllers.controller_data import ControllerData
 from bot.helpers.map_fixes import apply_map_fixes
-from sc2.data import Result
+from sc2.data import AbilityId, Result
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2
@@ -40,6 +40,8 @@ class WilldZergBot(AresBot):
         self._profiler = cProfile.Profile()
         if ENABLE_PERFORMANCE_PROFILING:
             self._profiler.enable()
+
+        self.cancelled_expansion = False
 
     async def setup_controllers(self) -> None:
         # The order of this list will be the order controllers are run in
@@ -161,8 +163,19 @@ class WilldZergBot(AresBot):
     async def on_unit_took_damage(self, unit: Unit, amount_damage_taken: float) -> None:
         await super().on_unit_took_damage(unit, amount_damage_taken)
 
-        if any(unit.position.distance_to(th) <= 10 for th in self.townhalls):
+        if unit.position.distance_to(self.start_location) <= 30 or any(
+            unit.position.distance_to(th) <= 10 for th in self.townhalls
+        ):
             self.controllers.set_under_attack_timer(100)
+
+        if (
+            unit.type_id == UnitTypeId.HATCHERY
+            and not unit.is_ready
+            and unit.health_percentage < 0.3
+            and self.controllers.being_rushed
+        ):
+            unit(AbilityId.CANCEL)
+            self.cancelled_expansion = True
 
     async def on_upgrade_complete(self, upgrade: UpgradeId) -> None:
         await super().on_upgrade_complete(upgrade)

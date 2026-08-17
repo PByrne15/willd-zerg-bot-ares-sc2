@@ -1,7 +1,10 @@
 from typing import TYPE_CHECKING
 
 from bot.controllers.controller import Controller
+from cython_extensions import cy_distance_to_squared
+from sc2.data import Race
 from sc2.ids.unit_typeid import UnitTypeId
+from sc2.unit import Unit
 
 if TYPE_CHECKING:
     from bot.main import WilldZergBot
@@ -24,13 +27,31 @@ class GameStateController(Controller):
     async def start(self) -> None:
         pass
 
+    def _is_proxy_zealot_extra(self) -> bool:
+        if self.ai.enemy_race != Race["Protoss"] or self.ai.time > 240:
+            return False
+
+        proxy_zealots: list[Unit] = [
+            z
+            for z in self.ai.enemy_units
+            if z.type_id == UnitTypeId.ZEALOT
+            and cy_distance_to_squared(z.position, self.ai.start_location) < 4225
+        ]
+        return (self.ai.time < 150.0 and len(proxy_zealots) >= 1) or (
+            self.ai.time < 180.0 and len(proxy_zealots) >= 2
+        )
+
     def _set_was_rushed(self) -> None:
-        if not self._was_rushed:
-            was_rushed = self.ai.mediator.get_did_enemy_rush
-            if was_rushed:
-                self._was_rushed = True
-                self._being_rushed = True
-                print(f"Detected that we're being rushed @ {self.ai.time_formatted}")
+        if self.ai.time > 240 or self._was_rushed:
+            return
+
+        was_rushed = (
+            self.ai.mediator.get_did_enemy_rush or self._is_proxy_zealot_extra()
+        )
+        if was_rushed:
+            self._was_rushed = True
+            self._being_rushed = True
+            print(f"Detected that we're being rushed @ {self.ai.time_formatted}")
 
     def _set_being_rushed(self) -> None:
         # Early exit when not being rushed

@@ -46,7 +46,7 @@ class DefendController(Controller):
             self._defend_point = self.ai.start_location
         elif (
             self.ai.structures(UnitTypeId.SPINECRAWLER).amount > 0
-            and self.ai.townhalls.amount < 3
+            and self.ai.townhalls.amount < 4
         ):
             pos, _ = cy_find_units_center_mass(
                 self.ai.structures(UnitTypeId.SPINECRAWLER), 5

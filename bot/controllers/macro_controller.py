@@ -263,6 +263,8 @@ class MacroController(Controller):
         if self.ai.mediator.get_enemy_worker_rushed and self.ai.time < 150:
             return
         if self.ai.controllers.being_rushed:
+            if self.ai.cancelled_expansion:
+                return
             self.ai.register_behavior(
                 FixedExpansionController(to_count=2, max_pending=1)
             )
@@ -457,6 +459,7 @@ class MacroController(Controller):
                 )
                 and cy_distance_to_squared(s.position, pos) > 25
                 and s.is_ready
+                and not self.ai.controllers.being_rushed
             ):
                 print("Trying to uproot Spinecrawler")
                 print(f"Distance squared = {cy_distance_to_squared(s.position, pos)=}")
