@@ -23,6 +23,7 @@ class GameStateController(Controller):
         self._cleanup = False
         self._enemy_late_nat = 0
         self._being_spine_rushed = False
+        self._being_cannon_rushed = False
 
     async def start(self) -> None:
         pass
@@ -114,15 +115,27 @@ class GameStateController(Controller):
     def _set_being_spine_rushed(self) -> None:
         if self.ai.time > 240:
             self._being_spine_rushed = False
+            return
 
         spines = self.ai.enemy_structures(
             [UnitTypeId.SPINECRAWLER, UnitTypeId.SPINECRAWLERUPROOTED]
         )
         if spines and spines.closest_distance_to(self.ai.start_location) < 15:
+            if not self._being_spine_rushed:
+                print(f"Being spine rushed @ {self.ai.time_formatted}")
             self._being_spine_rushed = True
             self._was_rushed = True
         elif self._being_spine_rushed:
             self._being_spine_rushed = False
+
+    def _set_being_cannon_rushed(self) -> None:
+        cannons = self.ai.enemy_structures(UnitTypeId.PHOTONCANNON)
+        if cannons and cannons.closest_distance_to(self.ai.start_location) < 30:
+            if not self._being_cannon_rushed:
+                print(f"Being cannon rushed @ {self.ai.time_formatted}")
+            self._being_cannon_rushed = True
+        elif self._being_cannon_rushed:
+            self._being_cannon_rushed = False
 
     async def update(self) -> None:
         self._set_was_rushed()
@@ -130,6 +143,7 @@ class GameStateController(Controller):
         self._set_cleanup_state()
         self._set_enemy_late_nat()
         self._set_being_spine_rushed()
+        self._set_being_cannon_rushed()
 
     def being_rushed(self) -> bool:
         return self._being_rushed
@@ -145,3 +159,6 @@ class GameStateController(Controller):
 
     def being_spine_rushed(self) -> bool:
         return self._being_spine_rushed
+
+    def being_cannon_rushed(self) -> bool:
+        return self._being_cannon_rushed

@@ -116,3 +116,7 @@ class ControllerData:
     @property
     def being_spine_rushed(self) -> bool:
         return self.interfaces["being_spine_rushed"]()
+
+    @property
+    def being_cannon_rushed(self) -> bool:
+        return self.interfaces["being_cannon_rushed"]()

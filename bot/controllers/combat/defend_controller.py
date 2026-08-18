@@ -5,7 +5,7 @@ from ares.behaviors.combat.combat_maneuver import CombatManeuver
 from ares.consts import (
     COMMON_UNIT_IGNORE_TYPES,
     LOSS_DECISIVE_OR_WORSE,
-    LOSS_MARGINAL_OR_WORSE,
+    TIE_OR_BETTER,
     VICTORY_DECISIVE_OR_BETTER,
     WORKER_TYPES,
     EngagementResult,
@@ -34,6 +34,7 @@ class DefendController(Controller):
         self.ai = ai
 
         self._defend_point: Point2 = Point2((0, 0))
+        self._engaging: dict[int, bool] = {}
 
     def defend_point(self) -> Point2:
         return self._defend_point
@@ -73,7 +74,7 @@ class DefendController(Controller):
                 )
             )
             close_structs: Units = self.ai.enemy_structures.in_distance_of_group(
-                self.ai.townhalls, 20
+                self.ai.townhalls, 30
             ).filter(
                 lambda s: (
                     s.type_id
@@ -91,6 +92,27 @@ class DefendController(Controller):
             # We've almost certainly lost so just have some behaviour to not crash
             close_units = self.ai.enemy_units
         return close_units
+
+    def _get_proxy_buildings(self) -> Units:
+        if self.ai.townhalls:
+            proxy_buildings: Units = self.ai.enemy_structures.closer_than(
+                50, self.ai.start_location
+            ).filter(
+                lambda u: (
+                    not u.type_id
+                    in {
+                        UnitTypeId.BUNKER,
+                        UnitTypeId.PLANETARYFORTRESS,
+                        UnitTypeId.SPINECRAWLER,
+                        UnitTypeId.SPINECRAWLERUPROOTED,
+                        UnitTypeId.PHOTONCANNON,
+                    }
+                )
+            )
+        else:
+            # We've almost certainly lost so just have some behaviour to not crash
+            proxy_buildings = self.ai.enemy_structures
+        return proxy_buildings
 
     def _default_defensive_behaviour(
         self, defender: Unit, ground_grid: np.ndarray
@@ -132,6 +154,11 @@ class DefendController(Controller):
         combat_sim_result: EngagementResult,
         ground_grid: np.ndarray,
     ) -> None:
+        tag = defender.tag
+        if tag not in self._engaging:
+            self._engaging[tag] = False
+        engaging = self._engaging[tag]
+
         maneuver: CombatManeuver = CombatManeuver()
         nearby_friendlies = defenders.closer_than(
             20, close_units.closest_to(defender)
@@ -148,23 +175,35 @@ class DefendController(Controller):
             .amount
             * 2
         )
-        nearby_enemies = close_units.closer_than(
+        nearby_enemies_units = close_units.closer_than(
             10, close_units.closest_to(defender)
+        )
+        nearby_enemies = nearby_enemies_units.amount
+
+        cannons = nearby_enemies_units.filter(
+            lambda u: u.type_id == UnitTypeId.PHOTONCANNON
         ).amount
+
+        defense_location = self._defend_point
         if (
-            combat_sim_result in LOSS_MARGINAL_OR_WORSE
+            not self.ai.townhalls
             or (
-                self.ai.townhalls
-                and defender.position.distance_to_closest(self.ai.townhalls) > 50
+                combat_sim_result in TIE_OR_BETTER
+                and defender.position.distance_to_closest(self.ai.townhalls) <= 50
             )
-        ) and nearby_enemies * 2 > nearby_friendlies:
+            or nearby_friendlies >= nearby_enemies * 2
+        ) and (
+            nearby_friendlies >= cannons * 8
+            or (engaging and nearby_friendlies >= cannons * 4)
+        ):
+            if close_units:
+                self._engaging[tag] = True
+                defense_location = close_units.closest_to(defender).position
+        else:
+            self._engaging[tag] = False
             maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
-        elif close_units:
-            # if defender.position.distance_to_closest(self.townhalls) > 40:
-            #     print(
-            #         f"{combat_sim_result=}, {nearby_enemies=}, {nearby_friendlies=}")
-            self._defend_point = close_units.closest_to(defender).position
-        maneuver.add(AMove(unit=defender, target=self._defend_point))
+
+        maneuver.add(AMove(unit=defender, target=defense_location))
         self.ai.register_behavior(maneuver)
 
     async def _check_for_overwhelming_enemy(self, defenders: Units) -> None:
@@ -237,7 +276,5 @@ class DefendController(Controller):
             self._defensive_behaviour(
                 defender, defenders, close_units, combat_sim_result, ground_grid
             )
-
-        self._set_defend_point()
 
         await self._check_for_overwhelming_enemy(defenders)

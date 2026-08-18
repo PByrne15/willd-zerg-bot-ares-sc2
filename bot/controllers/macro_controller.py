@@ -13,7 +13,7 @@ from ares.behaviors.macro import (
     TechUp,
     UpgradeController,
 )
-from ares.consts import UnitRole
+from ares.consts import ID, UnitRole
 from bot.controllers.controller import Controller
 from bot.expansion_controller import FixedExpansionController
 from cython_extensions import cy_distance_to_squared, cy_towards
@@ -260,7 +260,25 @@ class MacroController(Controller):
             )
 
     def _expansions(self) -> None:
-        if self.ai.mediator.get_enemy_worker_rushed and self.ai.time < 150:
+        if (
+            self.ai.mediator.get_enemy_worker_rushed and self.ai.time < 150
+        ) or self.ai.controllers.being_cannon_rushed:
+            if self.ai.townhalls.amount == 1:
+                building_orders = self.ai.mediator.get_building_tracker_dict
+                building_counter = self.ai.mediator.get_building_counter
+                for worker_tag, details in building_orders.items():
+                    if details[ID] == UnitTypeId.HATCHERY:
+                        building_counter[UnitTypeId.HATCHERY] -= 1
+                        building_orders.pop(worker_tag)
+                        # ensure worker is correctly reassigned
+                        self.ai.mediator.assign_role(
+                            tag=worker_tag, role=UnitRole.GATHERING
+                        )
+                        break
+
+            self.ai.register_behavior(
+                FixedExpansionController(to_count=1, max_pending=0)
+            )
             return
         if self.ai.controllers.being_rushed:
             if self.ai.cancelled_expansion:
@@ -322,6 +340,8 @@ class MacroController(Controller):
             or self.ai.townhalls.amount >= 3
             or under_attack
             or self.ai.controllers.being_rushed
+            or self.ai.controllers.being_cannon_rushed
+            or self.ai.supply_workers < 19
         ):
             if self.ai.supply_workers >= worker_count or (
                 under_attack and not self.ai.controllers.being_rushed
