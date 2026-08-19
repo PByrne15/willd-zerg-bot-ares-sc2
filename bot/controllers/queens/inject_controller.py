@@ -30,6 +30,9 @@ class InjectController(Controller):
             return False
 
         ths = Units(self.ai.mediator.get_units_from_tags(tags=no_queen_ths), self.ai)
+        if not ths:
+            return False
+
         self._inject_dict[ths.closest_to(queen).tag] = queen.tag
         self.ai.mediator.assign_role(tag=queen.tag, role=UnitRole.QUEEN_INJECT)
         print(
