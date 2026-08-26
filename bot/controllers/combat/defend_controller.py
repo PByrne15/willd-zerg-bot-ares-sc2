@@ -1,3 +1,4 @@
+from collections import deque
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -19,6 +20,7 @@ from bot.behaviour_overwrite import (
 )
 from bot.controllers.controller import Controller
 from cython_extensions.units_utils import (
+    cy_center,
     cy_find_units_center_mass,
 )
 from sc2.units import Point2, Unit, Units, UnitTypeId
@@ -35,7 +37,11 @@ class DefendController(Controller):
         self.ai = ai
 
         self._defend_point: Point2 = Point2((0, 0))
+        self._staging_area: Point2 = Point2((0, 0))
         self._engaging: dict[int, bool] = {}
+
+        self._close_units_com_history: deque[Point2] = deque(maxlen=20)
+        self._close_units_com_ma: Point2 = Point2((0, 0))
 
     def defend_point(self) -> Point2:
         return self._defend_point
@@ -50,9 +56,7 @@ class DefendController(Controller):
             self.ai.structures(UnitTypeId.SPINECRAWLER).amount > 0
             and self.ai.townhalls.amount < 4
         ):
-            pos, _ = cy_find_units_center_mass(
-                self.ai.structures(UnitTypeId.SPINECRAWLER), 5
-            )
+            pos = cy_center(self.ai.structures(UnitTypeId.SPINECRAWLER))
             self._defend_point = Point2(pos)
         elif self.ai.townhalls.amount < 3:
             self._defend_point = self.ai.expansion_entrance
@@ -93,6 +97,29 @@ class DefendController(Controller):
             # We've almost certainly lost so just have some behaviour to not crash
             close_units = self.ai.enemy_units
         return close_units
+
+    def _set_staging_area(self, close_units_com: Point2) -> None:
+        self._close_units_com_history.append(close_units_com)
+
+        points = list(self._close_units_com_history)
+        self._close_units_com_ma = Point2.center(points)
+
+        path = self.ai.mediator.get_map_data_object.pathfind(
+            self._close_units_com_ma,
+            self.ai.start_location,
+            self.ai.mediator.get_cached_ground_grid,
+        )
+        if not path:
+            self._staging_area = self._defend_point
+        elif len(path) > 20:
+            self._staging_area = path[20]
+        else:
+            self._staging_area = path[-1]
+        # if self.ai.config["Debug"]:
+        #     self.ai.draw_text_on_world(
+        #         Point2(self._staging_area), "STAGING AREA", color=(255, 0, 0)
+        #     )
+        #     self.ai.draw_text_on_world(self._close_units_com_ma, "COM")
 
     def _get_proxy_buildings(self) -> Units:
         if self.ai.townhalls:
@@ -190,7 +217,7 @@ class DefendController(Controller):
             not self.ai.townhalls
             or (
                 combat_sim_result in TIE_OR_BETTER
-                and defender.position.distance_to_closest(self.ai.townhalls) <= 50
+                and defender.position.distance_to_closest(self.ai.townhalls) <= 40
             )
             or (
                 combat_sim_result in LOSS_MARGINAL_OR_BETTER
@@ -207,6 +234,7 @@ class DefendController(Controller):
                 defense_location = close_units.closest_to(defender).position
         else:
             self._engaging[tag] = False
+            defense_location = self._staging_area
             maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
 
         maneuver.add(AMove(unit=defender, target=defense_location))
@@ -269,12 +297,23 @@ class DefendController(Controller):
         close_units = self._get_close_units()
 
         if not close_units:
+            self._staging_area = self._defend_point
+            self._close_units_com_history.clear()
             for defender in defenders_this_iteration:
                 self._default_defensive_behaviour(defender, ground_grid)
             return
 
+        close_units_com, _ = cy_find_units_center_mass(close_units, 10)
+        close_units_com = Point2(close_units_com)
+
+        self._set_staging_area(close_units_com)
+
+        defenders_within_engage_range = defenders.closer_than(
+            30, self._close_units_com_ma
+        )
+
         combat_sim_result: EngagementResult = self.ai.mediator.can_win_fight(
-            own_units=defenders, enemy_units=close_units
+            own_units=defenders_within_engage_range, enemy_units=close_units
         )
         # self._revert_attackers_to_defenders(defenders, combat_sim_result, close_units)
 
