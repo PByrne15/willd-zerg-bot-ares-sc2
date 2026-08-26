@@ -120,3 +120,7 @@ class ControllerData:
     @property
     def being_cannon_rushed(self) -> bool:
         return self.interfaces["being_cannon_rushed"]()
+
+    @property
+    def need_mineral_spores(self) -> bool:
+        return self.interfaces["need_mineral_spores"]()

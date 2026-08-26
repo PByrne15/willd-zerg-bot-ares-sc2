@@ -24,6 +24,7 @@ class GameStateController(Controller):
         self._enemy_late_nat = 0
         self._being_spine_rushed = False
         self._being_cannon_rushed = False
+        self._need_mineral_spores = False
 
     async def start(self) -> None:
         pass
@@ -137,6 +138,24 @@ class GameStateController(Controller):
         elif self._being_cannon_rushed:
             self._being_cannon_rushed = False
 
+    def _set_need_mineral_spores(self) -> None:
+        if not self.ai.townhalls or self._need_mineral_spores:
+            return
+
+        close_enemy_air_units = self.ai.enemy_units.filter(
+            lambda u: (
+                u.type_id
+                in [
+                    UnitTypeId.BANSHEE,
+                    UnitTypeId.ORACLE,
+                    UnitTypeId.MUTALISK,
+                    UnitTypeId.BATTLECRUISER,
+                ]
+            )
+        ).in_distance_of_group(self.ai.townhalls, 40)
+        if close_enemy_air_units:
+            self._need_mineral_spores = True
+
     async def update(self) -> None:
         self._set_was_rushed()
         self._set_being_rushed()
@@ -144,6 +163,7 @@ class GameStateController(Controller):
         self._set_enemy_late_nat()
         self._set_being_spine_rushed()
         self._set_being_cannon_rushed()
+        self._set_need_mineral_spores()
 
     def being_rushed(self) -> bool:
         return self._being_rushed
@@ -162,3 +182,6 @@ class GameStateController(Controller):
 
     def being_cannon_rushed(self) -> bool:
         return self._being_cannon_rushed
+
+    def need_mineral_spores(self) -> bool:
+        return self._need_mineral_spores

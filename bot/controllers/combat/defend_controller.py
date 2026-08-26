@@ -5,6 +5,7 @@ from ares.behaviors.combat.combat_maneuver import CombatManeuver
 from ares.consts import (
     COMMON_UNIT_IGNORE_TYPES,
     LOSS_DECISIVE_OR_WORSE,
+    LOSS_MARGINAL_OR_BETTER,
     TIE_OR_BETTER,
     VICTORY_DECISIVE_OR_BETTER,
     WORKER_TYPES,
@@ -163,7 +164,7 @@ class DefendController(Controller):
         nearby_friendlies = defenders.closer_than(
             20, close_units.closest_to(defender)
         ).amount
-        # Double count spine crawlers to encourage engaging near them
+        # Triple count spine crawlers to encourage engaging near them
         nearby_friendlies += (
             self.ai.structures(UnitTypeId.SPINECRAWLER)
             .filter(
@@ -173,7 +174,7 @@ class DefendController(Controller):
                 )
             )
             .amount
-            * 2
+            * 3
         )
         nearby_enemies_units = close_units.closer_than(
             10, close_units.closest_to(defender)
@@ -190,6 +191,11 @@ class DefendController(Controller):
             or (
                 combat_sim_result in TIE_OR_BETTER
                 and defender.position.distance_to_closest(self.ai.townhalls) <= 50
+            )
+            or (
+                combat_sim_result in LOSS_MARGINAL_OR_BETTER
+                and defender.position.distance_to_closest(self.ai.townhalls) <= 50
+                and engaging
             )
             or nearby_friendlies >= nearby_enemies * 2
         ) and (

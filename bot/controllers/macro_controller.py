@@ -16,7 +16,11 @@ from ares.behaviors.macro import (
 from ares.consts import ID, UnitRole
 from bot.controllers.controller import Controller
 from bot.expansion_controller import FixedExpansionController
-from cython_extensions import cy_distance_to_squared, cy_towards
+from cython_extensions import (
+    cy_center,
+    cy_distance_to_squared,
+    cy_towards,
+)
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
@@ -73,6 +77,7 @@ class MacroController(Controller):
         pos: Point2,
         max_distance: int = 20,
         random_alternative: bool = True,
+        ignore_danger: bool = False,
     ) -> None:
         build_pos: Point2 | None = await self.ai.find_placement(
             structure_type,
@@ -80,8 +85,11 @@ class MacroController(Controller):
             random_alternative=random_alternative,
             max_distance=max_distance,
         )
-        if build_pos and self.ai.mediator.is_position_safe(
-            grid=self.ai.mediator.get_ground_grid, position=build_pos
+        if build_pos and (
+            ignore_danger
+            or self.ai.mediator.is_position_safe(
+                grid=self.ai.mediator.get_ground_grid, position=build_pos
+            )
         ):
             worker = self.ai.mediator.select_worker(target_position=build_pos)
             if worker:
@@ -503,6 +511,38 @@ class MacroController(Controller):
                     s.move(pos)
                 return
 
+    async def _build_spores(self) -> None:
+        if not self.ai.controllers.need_mineral_spores:
+            return
+
+        spores_per_base = 1
+
+        th_positions = [th.position for th in self.ai.townhalls]
+        for expo in self.ai.expansion_locations_list:
+            if expo in th_positions:
+                mineral_fields = self.ai.mineral_field.closer_than(10, expo)
+                com = cy_center(mineral_fields)
+                spore_position = Point2(com)
+                spore_position = Point2(spore_position.towards(expo, 1)).round(0)
+                existing_spore = len(
+                    [
+                        s
+                        for s in self.ai.mediator.get_own_structures_dict[
+                            UnitTypeId.SPORECRAWLER
+                        ]
+                        if cy_distance_to_squared(s.position, spore_position) < 100.0
+                    ]
+                ) + self.ai.not_started_but_in_building_tracker(UnitTypeId.SPORECRAWLER)
+
+                if (
+                    existing_spore < spores_per_base
+                    and self.ai.can_afford(UnitTypeId.SPORECRAWLER)
+                    and self.ai.has_creep(spore_position)
+                ):
+                    await self._build_structure(
+                        UnitTypeId.SPORECRAWLER, spore_position, 4, False, True
+                    )
+
     async def update(self) -> None:
         self._macro_plan = MacroPlan()
 
@@ -514,6 +554,7 @@ class MacroController(Controller):
             self._hq = self.ai.townhalls.first
 
         await self._build_spines()
+        await self._build_spores()
         self._move_spines()
         self._gas_mining()
         self._extractor_building()
