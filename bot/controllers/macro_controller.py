@@ -521,6 +521,8 @@ class MacroController(Controller):
         for expo in self.ai.expansion_locations_list:
             if expo in th_positions:
                 mineral_fields = self.ai.mineral_field.closer_than(10, expo)
+                if not mineral_fields:
+                    continue
                 com = cy_center(mineral_fields)
                 spore_position = Point2(com)
                 spore_position = Point2(spore_position.towards(expo, 1)).round(0)
