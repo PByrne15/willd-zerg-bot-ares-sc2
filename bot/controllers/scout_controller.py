@@ -31,32 +31,6 @@ class ScoutController(Controller):
     async def start(self):
         pass
 
-    async def update(self) -> None:
-        if self._first_iteration:
-            ol = self.ai.units(UnitTypeId.OVERLORD).first
-            self.ai.mediator.assign_role(tag=ol.tag, role=UnitRole.SCOUTING)
-            self._first_iteration = False
-
-        ols = self.ai.mediator.get_units_from_role(
-            role=UnitRole.SCOUTING, unit_type=UnitTypeId.OVERLORD
-        )
-        for ol in ols:
-            maneuver = CombatManeuver()
-            maneuver.add(
-                PathUnitToTarget(
-                    ol,
-                    self.ai.mediator.get_air_grid,
-                    self.ai.mediator.get_ol_spot_near_enemy_nat,
-                )
-            )
-            self.ai.register_behavior(maneuver)
-
-        if self._scouting_natural:
-            self._scout_for_natural()
-
-        self._defending_overseer()
-        self._attacking_overseer()
-
     def scout_for_natural(self) -> None:
         print("Sending scout to natural")
         self._scouting_natural = True
@@ -113,7 +87,6 @@ class ScoutController(Controller):
         if self._nat_scout_unit and self.ai.is_visible(enemy_nat):
             # Successfully scouted a lack of natural so add an extra retry when the unit is killed
             self._scouted_lack_of_natural = True
-            return
 
         # Assign a new scout if we don't have one and can't already see the natural location
         if not self._nat_scout_unit and not self.ai.is_visible(enemy_nat):
@@ -143,7 +116,31 @@ class ScoutController(Controller):
             return
 
         if scouting_unit := self.ai.unit_tag_dict.get(self._nat_scout_unit):
-            scouting_unit.move(enemy_nat)
+            if scouting_unit.type_id in [UnitTypeId.OVERLORD, UnitTypeId.OVERSEER]:
+                grid = self.ai.mediator.get_air_grid
+                retreat_spot = self.ai.mediator.get_ol_spot_near_enemy_nat
+            else:
+                grid = self.ai.mediator.get_ground_grid
+                retreat_spot = self.ai.mediator.get_map_data_object.pathfind(
+                    enemy_nat,
+                    self.ai.start_location,
+                    grid,
+                )
+                if not retreat_spot:
+                    retreat_spot = enemy_nat  # This really shouldn't be possible
+                elif len(retreat_spot) <= 10:
+                    retreat_spot = retreat_spot[-1]
+                else:
+                    retreat_spot = retreat_spot[10]
+
+            if not self.ai.is_visible(enemy_nat) and not self._enemy_nat_taken:
+                self.ai.register_behavior(
+                    PathUnitToTarget(unit=scouting_unit, grid=grid, target=enemy_nat)
+                )
+            else:
+                self.ai.register_behavior(
+                    PathUnitToTarget(unit=scouting_unit, grid=grid, target=retreat_spot)
+                )
         else:
             # Scouting unit must have died
             self._nat_scout_unit = 0
@@ -213,3 +210,32 @@ class ScoutController(Controller):
             overlord = self.ai.units(UnitTypeId.OVERLORD).closest_to(location)
             overlord(AbilityId.MORPH_OVERSEER, subtract_cost=True)
             self.ai.mediator.assign_role(tag=overlord.tag, role=role)
+
+    def _first_overlord(self) -> None:
+        if self._first_iteration:
+            ol = self.ai.units(UnitTypeId.OVERLORD).first
+            self.ai.mediator.assign_role(tag=ol.tag, role=UnitRole.SCOUTING)
+            self._first_iteration = False
+
+        ols = self.ai.mediator.get_units_from_role(
+            role=UnitRole.SCOUTING, unit_type=UnitTypeId.OVERLORD
+        )
+        for ol in ols:
+            maneuver = CombatManeuver()
+            maneuver.add(
+                PathUnitToTarget(
+                    ol,
+                    self.ai.mediator.get_air_grid,
+                    self.ai.mediator.get_ol_spot_near_enemy_nat,
+                )
+            )
+            self.ai.register_behavior(maneuver)
+
+    async def update(self) -> None:
+        self._first_overlord()
+
+        if self._scouting_natural:
+            self._scout_for_natural()
+
+        self._defending_overseer()
+        self._attacking_overseer()
