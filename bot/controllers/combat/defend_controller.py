@@ -23,6 +23,7 @@ from cython_extensions.units_utils import (
     cy_center,
     cy_find_units_center_mass,
 )
+from sc2.ids.upgrade_id import UpgradeId
 from sc2.units import Point2, Unit, Units, UnitTypeId
 
 if TYPE_CHECKING:
@@ -49,14 +50,22 @@ class DefendController(Controller):
     async def start(self) -> None:
         self._defend_point = self.ai.expansion_entrance
 
+    def _update_engaging_dict(self) -> None:
+        self._engaging = {
+            unit: self._engaging.get(unit, False) for unit in self.ai.unit_tag_dict
+        }
+
     def _set_defend_point(self) -> None:
+        spines = self.ai.mediator.get_own_structures_dict.get(
+            UnitTypeId.SPINECRAWLER, []
+        )
         if not self.ai.townhalls:
             self._defend_point = self.ai.start_location
         elif (
-            self.ai.structures(UnitTypeId.SPINECRAWLER).amount > 0
+            self.ai.mediator.get_own_structures_dict.get(UnitTypeId.SPINECRAWLER, [])
             and self.ai.townhalls.amount < 4
         ):
-            pos = cy_center(self.ai.structures(UnitTypeId.SPINECRAWLER))
+            pos = cy_center(spines)
             self._defend_point = Point2(pos)
         elif self.ai.townhalls.amount < 3:
             self._defend_point = self.ai.expansion_entrance
@@ -68,8 +77,14 @@ class DefendController(Controller):
     def _get_close_units(self) -> Units:
         if self.ai.townhalls:
             close_units: Units = self.ai.enemy_units.in_distance_of_group(
-                self.ai.townhalls, 40
-            ).filter(
+                self.ai.townhalls, 30
+            )
+            if close_units:
+                for th in self.ai.townhalls:
+                    close_units += self.ai.enemy_units.closer_than(
+                        20, close_units.furthest_to(th)
+                    )
+            close_units = close_units.filter(
                 lambda u: (
                     not u.is_flying
                     and not u.is_cloaked
@@ -143,13 +158,47 @@ class DefendController(Controller):
         return proxy_buildings
 
     def _default_defensive_behaviour(
-        self, defender: Unit, ground_grid: np.ndarray
+        self, defender: Unit, defenders: Units, ground_grid: np.ndarray
     ) -> None:
+        tag = defender.tag
         maneuver: CombatManeuver = CombatManeuver()
-        maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
-        maneuver.add(
-            PathUnitToTarget(unit=defender, grid=ground_grid, target=self._defend_point)
-        )
+        # Stop chasing if no ling speed
+        if (
+            not self._engaging[tag]
+            or UpgradeId.ZERGLINGMOVEMENTSPEED not in self.ai.completed_researches
+        ):
+            maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
+            maneuver.add(
+                PathUnitToTarget(
+                    unit=defender, grid=ground_grid, target=self._defend_point
+                )
+            )
+            self._engaging[tag] = False
+        else:
+            nearby_friendlies = defenders.closer_than(10, defender).amount
+            enemies = self.ai.enemy_units.filter(
+                lambda u: (
+                    not u.is_flying
+                    and not u.is_cloaked
+                    and not u.is_hallucination
+                    and not u.type_id in COMMON_UNIT_IGNORE_TYPES
+                    and u.can_be_attacked
+                )
+            )
+            nearest_unit = enemies.closest_to(defender)
+            nearby_enemies = enemies.closer_than(10, nearest_unit).amount
+
+            if nearby_friendlies >= nearby_enemies * 2:
+                maneuver.add(AMove(unit=defender, target=nearest_unit.position))
+            else:
+                maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
+                maneuver.add(
+                    PathUnitToTarget(
+                        unit=defender, grid=ground_grid, target=self._defend_point
+                    )
+                )
+                self._engaging[tag] = False
+
         self.ai.register_behavior(maneuver)
 
     def _revert_attackers_to_defenders(
@@ -183,29 +232,21 @@ class DefendController(Controller):
         ground_grid: np.ndarray,
     ) -> None:
         tag = defender.tag
-        if tag not in self._engaging:
-            self._engaging[tag] = False
         engaging = self._engaging[tag]
 
+        closest_enemy_unit = close_units.closest_to(defender)
         maneuver: CombatManeuver = CombatManeuver()
-        nearby_friendlies = defenders.closer_than(
-            20, close_units.closest_to(defender)
-        ).amount
+        nearby_friendlies = defenders.closer_than(20, closest_enemy_unit).amount
         # Triple count spine crawlers to encourage engaging near them
         nearby_friendlies += (
             self.ai.structures(UnitTypeId.SPINECRAWLER)
             .filter(
-                lambda s: (
-                    s.is_ready
-                    and s.position.distance_to(close_units.closest_to(defender)) < 7
-                )
+                lambda s: s.is_ready and s.position.distance_to(closest_enemy_unit) < 7
             )
             .amount
             * 3
         )
-        nearby_enemies_units = close_units.closer_than(
-            10, close_units.closest_to(defender)
-        )
+        nearby_enemies_units = close_units.closer_than(10, closest_enemy_unit)
         nearby_enemies = nearby_enemies_units.amount
 
         cannons = nearby_enemies_units.filter(
@@ -229,9 +270,8 @@ class DefendController(Controller):
             nearby_friendlies >= cannons * 8
             or (engaging and nearby_friendlies >= cannons * 4)
         ):
-            if close_units:
-                self._engaging[tag] = True
-                defense_location = close_units.closest_to(defender).position
+            self._engaging[tag] = True
+            defense_location = closest_enemy_unit.position
         else:
             self._engaging[tag] = False
             defense_location = self._staging_area
@@ -283,6 +323,8 @@ class DefendController(Controller):
                 self.ai.mediator.assign_role(tag=worker.tag, role=UnitRole.DEFENDING)
 
     async def update(self) -> None:
+        self._update_engaging_dict()
+
         ground_grid: np.ndarray = self.ai.mediator.get_ground_grid
         defenders: Units = self.ai.mediator.get_units_from_role(role=UnitRole.DEFENDING)
         interval = self.ai.controllers.ling_micro_interval
@@ -300,7 +342,7 @@ class DefendController(Controller):
             self._staging_area = self._defend_point
             self._close_units_com_history.clear()
             for defender in defenders_this_iteration:
-                self._default_defensive_behaviour(defender, ground_grid)
+                self._default_defensive_behaviour(defender, defenders, ground_grid)
             return
 
         close_units_com, _ = cy_find_units_center_mass(close_units, 10)
