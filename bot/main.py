@@ -1,4 +1,5 @@
 import cProfile
+import functools
 import pstats
 from typing import TYPE_CHECKING
 
@@ -88,9 +89,10 @@ class WilldZergBot(AresBot):
 
         self.completed_researches: set[UpgradeId] = set()
 
+    @functools.cache  # noqa: B019
     def _position_facing_enemy_base(self, point: Point2) -> Point2:
         path = self.mediator.get_map_data_object.pathfind(
-            point, self.enemy_start_locations[0], self.mediator.get_ground_grid
+            point, self.enemy_start_locations[0], self.mediator.get_cached_ground_grid
         )
         if not path:
             return self.expansion_entrance

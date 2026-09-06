@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from ares.behaviors.combat.combat_maneuver import CombatManeuver
 from ares.consts import (
+    CHANGELING_TYPES,
     COMMON_UNIT_IGNORE_TYPES,
     LOSS_DECISIVE_OR_WORSE,
     LOSS_MARGINAL_OR_BETTER,
@@ -84,6 +85,8 @@ class DefendController(Controller):
                     close_units += self.ai.enemy_units.closer_than(
                         20, close_units.furthest_to(th)
                     )
+            close_units = Units(list(set(close_units)), self.ai)
+
             close_units = close_units.filter(
                 lambda u: (
                     not u.is_flying
@@ -175,7 +178,6 @@ class DefendController(Controller):
             )
             self._engaging[tag] = False
         else:
-            nearby_friendlies = defenders.closer_than(10, defender).amount
             enemies = self.ai.enemy_units.filter(
                 lambda u: (
                     not u.is_flying
@@ -185,19 +187,28 @@ class DefendController(Controller):
                     and u.can_be_attacked
                 )
             )
-            nearest_unit = enemies.closest_to(defender)
-            nearby_enemies = enemies.closer_than(10, nearest_unit).amount
+            if enemies:
+                nearby_friendlies = defenders.closer_than(10, defender).amount
+                closest_enemy = enemies.closest_to(defender)
+                nearby_enemies = enemies.closer_than(10, closest_enemy).amount
 
-            if nearby_friendlies >= nearby_enemies * 2:
-                maneuver.add(AMove(unit=defender, target=nearest_unit.position))
+                if closest_enemy.distance_to(defender) < 10 and (
+                    nearby_friendlies >= nearby_enemies * 2
+                    or (closest_enemy.health + closest_enemy.shield <= 10)
+                ):
+                    maneuver.add(AMove(unit=defender, target=closest_enemy.position))
+                else:
+                    self._engaging[tag] = False
             else:
+                self._engaging[tag] = False
+
+            if not self._engaging[tag]:
                 maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
                 maneuver.add(
                     PathUnitToTarget(
                         unit=defender, grid=ground_grid, target=self._defend_point
                     )
                 )
-                self._engaging[tag] = False
 
         self.ai.register_behavior(maneuver)
 
@@ -254,6 +265,7 @@ class DefendController(Controller):
         ).amount
 
         defense_location = self._defend_point
+        success_at_distance = 2
         if (
             not self.ai.townhalls
             or (
@@ -271,13 +283,23 @@ class DefendController(Controller):
             or (engaging and nearby_friendlies >= cannons * 4)
         ):
             self._engaging[tag] = True
-            defense_location = closest_enemy_unit.position
+            if closest_enemy_unit.type_id in CHANGELING_TYPES:
+                defense_location = closest_enemy_unit
+                success_at_distance = 0
+            else:
+                defense_location = closest_enemy_unit.position
         else:
             self._engaging[tag] = False
             defense_location = self._staging_area
             maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
 
-        maneuver.add(AMove(unit=defender, target=defense_location))
+        maneuver.add(
+            AMove(
+                unit=defender,
+                target=defense_location,
+                success_at_distance=success_at_distance,
+            )
+        )
         self.ai.register_behavior(maneuver)
 
     async def _check_for_overwhelming_enemy(self, defenders: Units) -> None:
@@ -322,16 +344,22 @@ class DefendController(Controller):
             if worker:
                 self.ai.mediator.assign_role(tag=worker.tag, role=UnitRole.DEFENDING)
 
+    def _get_close_unit_com(self, close_units: Units) -> Point2:
+        close_units_com, _ = cy_find_units_center_mass(close_units, 10)
+        close_units_com = Point2(close_units_com)
+        return close_units_com
+
+    def _get_defenders_this_iteration(self, defenders: Units) -> list[Unit]:
+        interval: int = self.ai.controllers.ling_micro_interval
+        iteration_mod = self.ai.actual_iteration % interval
+        return [a for a in defenders if a.tag % interval == iteration_mod]
+
     async def update(self) -> None:
         self._update_engaging_dict()
 
         ground_grid: np.ndarray = self.ai.mediator.get_ground_grid
         defenders: Units = self.ai.mediator.get_units_from_role(role=UnitRole.DEFENDING)
-        interval = self.ai.controllers.ling_micro_interval
-        iteration_mod = self.ai.actual_iteration % interval
-        defenders_this_iteration = [
-            a for a in defenders if a.tag % interval == iteration_mod
-        ]
+        defenders_this_iteration = self._get_defenders_this_iteration(defenders)
 
         self._manage_worker_defense()
 
@@ -345,8 +373,7 @@ class DefendController(Controller):
                 self._default_defensive_behaviour(defender, defenders, ground_grid)
             return
 
-        close_units_com, _ = cy_find_units_center_mass(close_units, 10)
-        close_units_com = Point2(close_units_com)
+        close_units_com = self._get_close_unit_com(close_units)
 
         self._set_staging_area(close_units_com)
 

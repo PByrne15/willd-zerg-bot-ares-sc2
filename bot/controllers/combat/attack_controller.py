@@ -197,16 +197,19 @@ class AttackController(Controller):
             # print(
             #     f"{attacker.tag=}, {attacker.tag % self.ai.controllers.ling_micro_interval=}"
             # )
+            closest_enemy = None
+            closest_enemy_low_health = False
             maneuver: CombatManeuver = CombatManeuver()
             if enemy_units.closer_than(10, attacker):
-                nearby_friendlies = attackers.closer_than(
-                    20, enemy_units.closest_to(attacker)
-                ).amount
+                closest_enemy = enemy_units.closest_to(attacker)
+                nearby_friendlies = attackers.closer_than(20, closest_enemy).amount
                 nearby_enemies = (
-                    enemy_units.closer_than(15, enemy_units.closest_to(attacker))
+                    enemy_units.closer_than(15, closest_enemy)
                     .filter(lambda u: not u.type_id in self.ai.WORKER_TYPES)
                     .amount
                 )
+                if closest_enemy.health + closest_enemy.shield <= 10:
+                    closest_enemy_low_health = True
             else:
                 nearby_enemies = nearby_friendlies = 0
 
@@ -214,13 +217,14 @@ class AttackController(Controller):
                 combat_sim_result in LOSS_MARGINAL_OR_WORSE
                 and attackers.amount < 120
                 and nearby_enemies * 2 > nearby_friendlies
+                and not closest_enemy_low_health
             ):
                 maneuver.add(KeepUnitSafe(attacker, ground_grid))
 
             target: Point2 | Unit = self._decide_attack_target(
-                combat_sim_result, attacker, enemy_units
+                combat_sim_result, attacker, enemy_units, closest_enemy
             )
-            maneuver.add(AMove(unit=attacker, target=target))
+            maneuver.add(AMove(unit=attacker, target=target, success_at_distance=2))
 
             self.ai.register_behavior(maneuver)
 
@@ -276,7 +280,11 @@ class AttackController(Controller):
                     muta.move(new_position)
 
     def _decide_attack_target(
-        self, combat_sim_result: EngagementResult, unit: Unit, enemy_units: Units
+        self,
+        combat_sim_result: EngagementResult,
+        unit: Unit,
+        enemy_units: Units,
+        closest_enemy: Unit | None,
     ) -> Point2 | Unit:
         enemy_structures: Units = self.ai.enemy_structures.filter(
             lambda s: not s.is_flying
@@ -287,20 +295,18 @@ class AttackController(Controller):
         if self._attacks == 0:
             return self.ai.enemy_start_locations[0]
 
-        closest_unit = enemy_units.closest_to(unit) if enemy_units else None
-        if closest_unit and closest_unit.type_id in CHANGELING_TYPES:
-            return closest_unit
+        if closest_enemy and closest_enemy.type_id in CHANGELING_TYPES:
+            return closest_enemy
 
         if (
             (enemy_units and combat_sim_result in VICTORY_CLOSE_OR_BETTER)
-            and closest_unit
+            and closest_enemy
             and (
-                not closest_unit.is_burrowed
-                or closest_unit.type_id in [UnitTypeId.WIDOWMINEBURROWED]
+                not closest_enemy.is_burrowed
+                or closest_enemy.type_id in [UnitTypeId.WIDOWMINEBURROWED]
             )
-            and not closest_unit.type_id in CHANGELING_TYPES
         ):
-            return closest_unit.position
+            return closest_enemy.position
         elif enemy_structures:
             return cy_closest_to(unit.position, enemy_structures).position
         elif (
@@ -345,5 +351,8 @@ class AttackController(Controller):
         return max(
             1,
             # math.ceil equivalent that stays in integer domain so is more performant
-            -(self.ai.units(UnitTypeId.ZERGLING).amount // -MAX_ZERGLING_COMMANDS),
+            -(
+                len(self.ai.mediator.get_own_army_dict[UnitTypeId.ZERGLING])
+                // -MAX_ZERGLING_COMMANDS
+            ),
         )
