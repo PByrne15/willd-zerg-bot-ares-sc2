@@ -128,7 +128,8 @@ class MacroController(Controller):
             < 2
             and self.ai.can_afford(UnitTypeId.OVERLORD)
         ):
-            self.ai.larva.first.build(UnitTypeId.OVERLORD)
+            if self.ai.larva:
+                self.ai.larva.first.build(UnitTypeId.OVERLORD)
         elif self.ai.structures(UnitTypeId.SPAWNINGPOOL).ready:
             self._macro_plan.add(AutoSupply(base_location=self.ai.start_location))
 
