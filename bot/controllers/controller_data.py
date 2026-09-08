@@ -78,6 +78,10 @@ class ControllerData:
     def cancel_scout_for_natural(self) -> None:
         return self.interfaces["cancel_scout_for_natural"]()
 
+    @property
+    def scouted_expansions(self) -> list[Point2]:
+        return self.interfaces["scouted_expansions"]()
+
     # InjectController interfaces
     def add_inject_queen(self, queen: Unit) -> bool:
         return self.interfaces["add_inject_queen"](queen)

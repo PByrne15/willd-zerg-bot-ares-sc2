@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from ares.behaviors.combat.combat_maneuver import CombatManeuver
-from ares.consts import WORKER_TYPES, UnitRole
+from ares.consts import TOWNHALL_TYPES, WORKER_TYPES, UnitRole
 from bot.behaviour_overwrite import (
     PathUnitToTarget,
 )
@@ -28,6 +28,11 @@ class ScoutController(Controller):
         self._nat_scout_attempts = 0
         self._scouted_lack_of_natural = False
 
+        self._expansion_scout_targets: list[Point2] = []
+        self._expansion_scout_units: dict[Point2, int] = {}
+        self._expansion_scouting_started = False
+        self._scouted_expansions: list[Point2] = []
+
     async def start(self):
         pass
 
@@ -37,6 +42,9 @@ class ScoutController(Controller):
 
     def cancel_scout_for_natural(self) -> None:
         self._scouting_natural = False
+
+    def scouted_expansions(self) -> list[Point2]:
+        return self._scouted_expansions.copy()
 
     def enemy_nat_taken(self) -> bool:
         if not self._enemy_nat_taken:
@@ -169,6 +177,91 @@ class ScoutController(Controller):
                     )
                     self._scouting_natural = False
 
+    def _start_expansion_scouting(self) -> None:
+        if self._expansion_scouting_started:
+            return
+
+        self._expansion_scouting_started = True
+
+        enemy_start = self.ai.enemy_start_locations[0]
+        enemy_nat = self.ai.mediator.get_enemy_nat
+        expansion_paths: list[tuple[Point2, int]] = []
+        for expansion in self.ai.expansion_locations_list:
+            if (
+                expansion.distance_to(enemy_start) < 15
+                or expansion.distance_to(enemy_nat) < 8
+            ):
+                continue
+            if path := self.ai.mediator.get_map_data_object.pathfind(
+                enemy_start, expansion, self.ai.mediator.get_ground_grid
+            ):
+                expansion_paths.append((expansion, len(path)))
+
+        expansion_paths.sort(key=lambda expansion_path: expansion_path[1])
+        self._expansion_scout_targets = [
+            expansion for expansion, _ in expansion_paths[:5]
+        ]
+        if self._expansion_scout_targets:
+            print(
+                f"Starting expansion scouting at {self.ai.time_formatted}: "
+                f"{self._expansion_scout_targets}"
+            )
+
+    def _scout_enemy_expansions(self) -> None:
+        self._start_expansion_scouting()
+        if not self._expansion_scout_targets:
+            return
+
+        not_scouted_expansions = [
+            expansion
+            for expansion in self._expansion_scout_targets
+            if expansion not in self._scouted_expansions
+        ][:2]
+
+        for target in not_scouted_expansions:
+            if self.ai.enemy_structures(TOWNHALL_TYPES).closer_than(8, target):
+                self._expansion_scout_targets.remove(target)
+                self._expansion_scout_units.pop(target, None)
+                self._scouted_expansions.append(target)
+                print(f"Scouted enemy expansion at {target}")
+                continue
+
+            scout_tag = self._expansion_scout_units.get(target)
+            scouting_unit = self.ai.unit_tag_dict.get(scout_tag) if scout_tag else None
+
+            if scouting_unit is None:
+                self._expansion_scout_units.pop(target, None)
+                assigned_tags = set(self._expansion_scout_units.values())
+                available_scouts = self.ai.mediator.get_units_from_roles(
+                    roles=(UnitRole.DEFENDING, UnitRole.ATTACKING_MAIN_SQUAD),
+                    unit_type=UnitTypeId.ZERGLING,
+                ).filter(
+                    lambda unit, assigned_tags=assigned_tags: (
+                        unit.tag not in assigned_tags
+                    )
+                )
+                if not available_scouts:
+                    continue
+
+                scouting_unit = available_scouts.first
+                self._expansion_scout_units[target] = scouting_unit.tag
+
+            if (
+                scouting_unit.tag
+                not in self.ai.mediator.get_unit_role_dict[UnitRole.CONTROL_GROUP_ONE]
+            ):
+                self.ai.mediator.assign_role(
+                    tag=scouting_unit.tag, role=UnitRole.CONTROL_GROUP_ONE
+                )
+
+            self.ai.register_behavior(
+                PathUnitToTarget(
+                    unit=scouting_unit,
+                    grid=self.ai.mediator.get_ground_grid,
+                    target=target,
+                )
+            )
+
     def _defending_overseer(self) -> None:
         if UpgradeId.ZERGMELEEWEAPONSLEVEL1 in self.ai.completed_researches:
             count = 1
@@ -236,6 +329,8 @@ class ScoutController(Controller):
 
         if self._scouting_natural:
             self._scout_for_natural()
+        elif self.enemy_nat_taken():
+            self._scout_enemy_expansions()
 
         self._defending_overseer()
         self._attacking_overseer()
