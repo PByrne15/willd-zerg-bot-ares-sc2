@@ -175,20 +175,21 @@ class HarassController(Controller):
             self._end_raid()
             return
 
-        enemies_at_target = self.ai.enemy_units.filter(
-            lambda enemy: enemy.position.distance_to(target) < 10
-        )
-        workers_at_target = enemies_at_target.filter(
-            lambda enemy: enemy.type_id in WORKER_TYPES
-        )
-        if not workers_at_target and enemies_at_target.amount > 2:
-            self._end_raid()
-            return
-
         raid_units = self._raid_units()
         if not raid_units and not self.ai.actual_iteration % self._HARASS_INTERVAL:
             self._start_raid(target)
             raid_units = self._raid_units()
+
+        if any(u for u in raid_units if u.distance_to(target) < 10):
+            enemies_at_target = self.ai.enemy_units.filter(
+                lambda enemy: enemy.position.distance_to(target) < 10
+            )
+            workers_at_target = enemies_at_target.filter(
+                lambda enemy: enemy.type_id in WORKER_TYPES
+            )
+            if not workers_at_target and enemies_at_target.amount > 2:
+                self._end_raid()
+                return
 
         for unit in raid_units:
             self._raid_behaviour(unit, target)
