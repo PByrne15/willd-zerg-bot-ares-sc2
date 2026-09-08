@@ -142,28 +142,7 @@ class AttackController(Controller):
             )
 
     def _other_attacks(self) -> None:
-        attackers = self.ai.mediator.get_units_from_role(
-            role=UnitRole.ATTACKING_MAIN_SQUAD
-        )
-
-        enemy_units: Units = self.ai.enemy_units.filter(
-            lambda u: (
-                not u.is_flying
-                and not u.is_cloaked
-                and not u.is_hallucination
-                and not u.type_id in COMMON_UNIT_IGNORE_TYPES
-                and u.can_be_attacked
-            )
-        )
-        combat_sim_result: EngagementResult = self.ai.mediator.can_win_fight(
-            own_units=attackers,
-            enemy_units=enemy_units,
-            workers_do_no_damage=True,
-        )
-
-        if (
-            self.ai.supply_used == 200 and self._attacks >= 2
-        ) or combat_sim_result in VICTORY_DECISIVE_OR_BETTER:
+        if self.ai.supply_used == 200 and self._attacks >= 2:
             if self.ai.supply_used == 200:
                 self.ai.register_behavior(
                     UpgradeController(
@@ -213,6 +192,14 @@ class AttackController(Controller):
             enemy_units=enemy_units,
             workers_do_no_damage=True,
         )
+
+        if combat_sim_result in VICTORY_DECISIVE_OR_BETTER:
+            lings = self.ai.mediator.get_units_from_role(
+                role=UnitRole.DEFENDING, unit_type=UnitTypeId.ZERGLING
+            )
+            self.ai.mediator.batch_assign_role(
+                tags={l.tag for l in lings}, role=UnitRole.ATTACKING_MAIN_SQUAD
+            )
 
         interval = self.ai.controllers.ling_micro_interval
         iteration_mod = self.ai.actual_iteration % interval
