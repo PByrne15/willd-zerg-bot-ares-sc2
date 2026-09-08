@@ -27,8 +27,15 @@ class HarassController(Controller):
         pass
 
     def _raid_target(self) -> Point2 | None:
-        expansions = self.ai.controllers.scouted_expansions
-        return expansions[-1] if expansions else None
+        pf = self.ai.enemy_structures.filter(
+            lambda s: s.type_id == UnitTypeId.PLANETARYFORTRESS and s.is_ready
+        )
+        valid_targets = [
+            exp
+            for exp in self.ai.controllers.scouted_expansions
+            if not pf or pf.closest_distance_to(exp) > 8
+        ]
+        return valid_targets[-1] if valid_targets else None
 
     def _raid_units(self) -> Units:
         return self.ai.mediator.get_units_from_role(

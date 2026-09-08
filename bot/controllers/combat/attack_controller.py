@@ -13,6 +13,7 @@ from ares.consts import (
     LOSS_MARGINAL_OR_WORSE,
     TOWNHALL_TYPES,
     VICTORY_CLOSE_OR_BETTER,
+    VICTORY_DECISIVE_OR_BETTER,
     EngagementResult,
     UnitRole,
 )
@@ -141,13 +142,35 @@ class AttackController(Controller):
             )
 
     def _other_attacks(self) -> None:
-        if self.ai.supply_used == 200 and self._attacks >= 2:
-            self.ai.register_behavior(
-                UpgradeController(
-                    [UpgradeId.OVERLORDSPEED],
-                    base_location=self.ai.townhalls.first.position,
-                )
+        attackers = self.ai.mediator.get_units_from_role(
+            role=UnitRole.ATTACKING_MAIN_SQUAD
+        )
+
+        enemy_units: Units = self.ai.enemy_units.filter(
+            lambda u: (
+                not u.is_flying
+                and not u.is_cloaked
+                and not u.is_hallucination
+                and not u.type_id in COMMON_UNIT_IGNORE_TYPES
+                and u.can_be_attacked
             )
+        )
+        combat_sim_result: EngagementResult = self.ai.mediator.can_win_fight(
+            own_units=attackers,
+            enemy_units=enemy_units,
+            workers_do_no_damage=True,
+        )
+
+        if (
+            self.ai.supply_used == 200 and self._attacks >= 2
+        ) or combat_sim_result in VICTORY_DECISIVE_OR_BETTER:
+            if self.ai.supply_used == 200:
+                self.ai.register_behavior(
+                    UpgradeController(
+                        [UpgradeId.OVERLORDSPEED],
+                        base_location=self.ai.townhalls.first.position,
+                    )
+                )
 
             lings = self.ai.mediator.get_units_from_role(
                 role=UnitRole.DEFENDING, unit_type=UnitTypeId.ZERGLING
