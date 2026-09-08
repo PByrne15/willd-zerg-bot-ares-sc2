@@ -33,6 +33,7 @@ class ScoutController(Controller):
         self._expansion_scout_units: dict[Point2, int] = {}
         self._expansion_scouting_started = False
         self._scouted_expansions: list[Point2] = []
+        self._expansion_scout_cooldown_until: dict[Point2, float] = {}
 
     async def start(self):
         pass
@@ -227,14 +228,27 @@ class ScoutController(Controller):
         for target in not_scouted_expansions:
             if self.ai.enemy_structures(TOWNHALL_TYPES).closer_than(8, target):
                 self._expansion_scout_units.pop(target, None)
+                self._expansion_scout_cooldown_until.pop(target, None)
                 self._scouted_expansions.append(target)
                 print(f"Scouted enemy expansion at {target}")
+                continue
+
+            if self.ai.time < self._expansion_scout_cooldown_until.get(target, 0.0):
                 continue
 
             scout_tag = self._expansion_scout_units.get(target)
             scouting_unit = self.ai.unit_tag_dict.get(scout_tag) if scout_tag else None
 
             if scouting_unit is None:
+                if scout_tag is not None:
+                    self._expansion_scout_cooldown_until[target] = self.ai.time + 30.0
+                    self._expansion_scout_units.pop(target, None)
+                    print(
+                        f"Expansion scout died; pausing scouting until "
+                        f"{self._expansion_scout_cooldown_until[target]:.1f}"
+                    )
+                    continue
+
                 self._expansion_scout_units.pop(target, None)
                 assigned_tags = set(self._expansion_scout_units.values())
                 available_scouts = self.ai.mediator.get_units_from_roles(
@@ -265,7 +279,7 @@ class ScoutController(Controller):
                     unit=scouting_unit,
                     grid=self.ai.mediator.get_ground_grid,
                     target=target,
-                    success_at_distance=4,
+                    success_at_distance=7,
                 )
             )
             maneuver.add(
