@@ -4,7 +4,7 @@ from ares.behaviors.combat.individual import UseTransfuse
 from ares.consts import UnitRole
 from bot.controllers.controller import Controller
 from sc2.ids.unit_typeid import UnitTypeId
-from sc2.units import Point2, Unit
+from sc2.units import Unit
 
 if TYPE_CHECKING:
     from bot.main import WilldZergBot
@@ -23,6 +23,21 @@ class QueenController(Controller):
     def assign_queen_default(self, queen: Unit) -> None:
         if not self.ai.controllers.add_inject_queen(queen):
             self.ai.controllers.add_creep_queen(queen)
+
+    def assign_queen_defense(self, queen: Unit) -> None:
+        inject_queens = self.ai.mediator.get_units_from_roles(
+            roles={UnitRole.QUEEN_INJECT},
+            unit_type=UnitTypeId.QUEEN,
+        )
+        if queen in inject_queens:
+            self.ai.controllers.remove_inject_queen(queen)
+        creep_queens = self.ai.mediator.get_units_from_roles(
+            roles={UnitRole.QUEEN_CREEP},
+            unit_type=UnitTypeId.QUEEN,
+        )
+        if queen in creep_queens:
+            self.ai.controllers.remove_creep_queen(queen)
+        self.ai.mediator.assign_role(tag=queen.tag, role=UnitRole.DEFENDING)
 
     def _handle_unused_queens(self) -> None:
         queens = self.ai.units(UnitTypeId.QUEEN).ready.tags
@@ -85,10 +100,24 @@ class QueenController(Controller):
         for q in defensive_queens:
             self.assign_queen_default(q)
 
+    def _air_threat_near_base(self) -> bool:
+        if not self.ai.townhalls:
+            return False
+        return bool(
+            self.ai.enemy_units.in_distance_of_group(self.ai.townhalls, 30).filter(
+                lambda u: (
+                    u.is_flying
+                    and not u.is_cloaked
+                    and not u.is_hallucination
+                    and u.can_be_attacked
+                )
+            )
+        )
+
     async def update(self) -> None:
         self._handle_unused_queens()
 
-        if self.ai.controllers.under_attack_timer > 1:
+        if self.ai.controllers.under_attack_timer > 1 or self._air_threat_near_base():
             self._transition_creep_queens_to_defensive()
             if self.ai.controllers.being_rushed:
                 self._transition_inject_queens_to_defensive()

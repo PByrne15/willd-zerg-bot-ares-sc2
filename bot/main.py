@@ -171,6 +171,8 @@ class WilldZergBot(AresBot):
             unit.position.distance_to(th) <= 10 for th in self.townhalls
         ):
             self.controllers.set_under_attack_timer(100)
+            if unit.type_id == UnitTypeId.QUEEN:
+                self.controllers.assign_queen_defense(unit)
 
         if (
             unit.type_id == UnitTypeId.HATCHERY

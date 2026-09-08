@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from ares.behaviors.combat.combat_maneuver import CombatManeuver
+from ares.behaviors.combat.individual.stutter_unit_back import StutterUnitBack
 from ares.consts import (
     CHANGELING_TYPES,
     COMMON_UNIT_IGNORE_TYPES,
@@ -89,8 +90,7 @@ class DefendController(Controller):
 
             close_units = close_units.filter(
                 lambda u: (
-                    not u.is_flying
-                    and not u.is_cloaked
+                    not u.is_cloaked
                     and not u.is_hallucination
                     and not u.type_id in COMMON_UNIT_IGNORE_TYPES
                     and u.can_be_attacked
@@ -115,6 +115,78 @@ class DefendController(Controller):
             # We've almost certainly lost so just have some behaviour to not crash
             close_units = self.ai.enemy_units
         return close_units
+
+    def _get_close_ground_units(self, close_units: Units) -> Units:
+        return close_units.filter(lambda u: not u.is_flying)
+
+    def _get_close_air_units(self, close_units: Units) -> Units:
+        return close_units.filter(lambda u: u.is_flying)
+
+    def _air_defensive_behaviour(
+        self, defenders: Units, air_targets: Units, ground_grid: np.ndarray
+    ) -> bool:
+        defending_queens = defenders.filter(lambda u: u.type_id == UnitTypeId.QUEEN)
+        if not defending_queens or not air_targets:
+            return False
+
+        closest_air_target = air_targets.closest_to(self._defend_point)
+        available_queens = self.ai.mediator.get_units_from_roles(
+            roles={
+                UnitRole.DEFENDING,
+                UnitRole.QUEEN_CREEP,
+            },
+            unit_type=UnitTypeId.QUEEN,
+        ).closer_than(35, closest_air_target)
+        if not available_queens:
+            available_queens = defending_queens
+        combat_sim_result = self.ai.mediator.can_win_fight(
+            own_units=available_queens, enemy_units=air_targets
+        )
+        creep_position = self.ai.mediator.get_closest_creep_tile(
+            pos=closest_air_target.position
+        )
+
+        if creep_position is None:
+            return False
+
+        can_engage = (
+            combat_sim_result in TIE_OR_BETTER or air_targets.amount < 2
+        ) and closest_air_target.distance_to(creep_position) <= 8
+
+        for queen in defending_queens:
+            maneuver: CombatManeuver = CombatManeuver()
+            if can_engage:
+                if combat_sim_result in TIE_OR_BETTER:
+                    maneuver.add(AMove(unit=queen, target=creep_position))
+                else:
+                    maneuver.add(
+                        StutterUnitBack(
+                            unit=queen,
+                            target=closest_air_target,
+                            grid=ground_grid,
+                        )
+                    )
+                    maneuver.add(
+                        PathUnitToTarget(
+                            unit=queen,
+                            grid=ground_grid,
+                            target=self._defend_point,
+                            success_at_distance=7,
+                        )
+                    )
+            else:
+                maneuver.add(KeepUnitSafe(unit=queen, grid=ground_grid))
+                maneuver.add(
+                    PathUnitToTarget(
+                        unit=queen,
+                        grid=ground_grid,
+                        target=creep_position,
+                        success_at_distance=2,
+                    )
+                )
+            self.ai.register_behavior(maneuver)
+
+        return True
 
     def _set_staging_area(self, close_units_com: Point2) -> None:
         self._close_units_com_history.append(close_units_com)
@@ -359,21 +431,29 @@ class DefendController(Controller):
 
         ground_grid: np.ndarray = self.ai.mediator.get_ground_grid
         defenders: Units = self.ai.mediator.get_units_from_role(role=UnitRole.DEFENDING)
-        defenders_this_iteration = self._get_defenders_this_iteration(defenders)
 
         self._manage_worker_defense()
 
         self._set_defend_point()
         close_units = self._get_close_units()
+        close_ground_units = self._get_close_ground_units(close_units)
+        close_air_units = self._get_close_air_units(close_units)
 
-        if not close_units:
+        engaging_air = self._air_defensive_behaviour(
+            defenders, close_air_units, ground_grid
+        )
+        if engaging_air:
+            defenders = defenders.filter(lambda u: u.type_id != UnitTypeId.QUEEN)
+
+        defenders_this_iteration = self._get_defenders_this_iteration(defenders)
+        if not close_ground_units:
             self._staging_area = self._defend_point
             self._close_units_com_history.clear()
             for defender in defenders_this_iteration:
                 self._default_defensive_behaviour(defender, defenders, ground_grid)
             return
 
-        close_units_com = self._get_close_unit_com(close_units)
+        close_units_com = self._get_close_unit_com(close_ground_units)
 
         self._set_staging_area(close_units_com)
 
@@ -382,13 +462,13 @@ class DefendController(Controller):
         )
 
         combat_sim_result: EngagementResult = self.ai.mediator.can_win_fight(
-            own_units=defenders_within_engage_range, enemy_units=close_units
+            own_units=defenders_within_engage_range, enemy_units=close_ground_units
         )
         # self._revert_attackers_to_defenders(defenders, combat_sim_result, close_units)
 
         for defender in defenders_this_iteration:
             self._defensive_behaviour(
-                defender, defenders, close_units, combat_sim_result, ground_grid
+                defender, defenders, close_ground_units, combat_sim_result, ground_grid
             )
 
         await self._check_for_overwhelming_enemy(defenders)

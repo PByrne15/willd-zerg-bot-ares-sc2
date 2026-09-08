@@ -100,6 +100,9 @@ class ControllerData:
     def assign_queen_default(self, queen: Unit) -> None:
         return self.interfaces["assign_queen_default"](queen)
 
+    def assign_queen_defense(self, queen: Unit) -> None:
+        return self.interfaces["assign_queen_defense"](queen)
+
     # GameStateController interfaces
     @property
     def being_rushed(self) -> bool:
