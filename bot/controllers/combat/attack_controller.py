@@ -11,6 +11,7 @@ from ares.consts import (
     CHANGELING_TYPES,
     COMMON_UNIT_IGNORE_TYPES,
     LOSS_MARGINAL_OR_WORSE,
+    TOWNHALL_TYPES,
     VICTORY_CLOSE_OR_BETTER,
     EngagementResult,
     UnitRole,
@@ -85,7 +86,10 @@ class AttackController(Controller):
             ).amount
             > 1
             or self.ai.enemy_structures.filter(
-                lambda u: u.type_id is UnitTypeId.PHOTONCANNON and u.is_ready
+                lambda u: (
+                    u.type_id in [UnitTypeId.PHOTONCANNON, UnitTypeId.BUNKER]
+                    and u.is_ready
+                )
             ).amount
             > 0
         )
@@ -106,14 +110,17 @@ class AttackController(Controller):
             and not self._skip_first_attack
             and (
                 self.ai.enemy_structures.filter(
-                    lambda u: u.type_id is UnitTypeId.PHOTONCANNON and u.is_ready
+                    lambda u: (
+                        u.type_id in [UnitTypeId.PHOTONCANNON, UnitTypeId.BUNKER]
+                        and u.is_ready
+                    )
                 ).amount
                 > 0
                 or self.ai.main_ramp_walled_off(self.ai.mediator.get_enemy_ramp)
             )
         ):
             self._skip_first_attack = True
-            print("Scouted a cannon or wall so skipping first timing attack")
+            print("Scouted a cannon, bunker, or wall so skipping first timing attack")
             return
 
         if self.ai.actual_iteration == self._trigger_attack_time + 100:
@@ -289,6 +296,9 @@ class AttackController(Controller):
         enemy_structures: Units = self.ai.enemy_structures.filter(
             lambda s: not s.is_flying
         )
+        enemy_townhalls: Units = enemy_structures.filter(
+            lambda s: s.type_id in TOWNHALL_TYPES
+        )
         current_target = unit.order_target
 
         # First attack should always go to enemy base
@@ -307,6 +317,10 @@ class AttackController(Controller):
             )
         ):
             return closest_enemy.position
+        elif self.ai.controllers.scouted_expansions:
+            return self.ai.controllers.scouted_expansions[-1]
+        elif enemy_townhalls:
+            return cy_closest_to(unit.position, enemy_townhalls).position
         elif enemy_structures:
             return cy_closest_to(unit.position, enemy_structures).position
         elif (
