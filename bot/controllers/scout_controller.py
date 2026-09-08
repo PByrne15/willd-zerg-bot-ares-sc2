@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 from ares.behaviors.combat.combat_maneuver import CombatManeuver
 from ares.consts import TOWNHALL_TYPES, WORKER_TYPES, UnitRole
 from bot.behaviour_overwrite import (
+    KeepUnitSafe,
     PathUnitToTarget,
 )
 from bot.controllers.controller import Controller
@@ -209,7 +210,12 @@ class ScoutController(Controller):
 
     def _scout_enemy_expansions(self) -> None:
         self._start_expansion_scouting()
-        if not self._expansion_scout_targets:
+        enemy_townhalls = self.ai.enemy_structures(TOWNHALL_TYPES)
+        for expansion in self._scouted_expansions.copy():
+            if not enemy_townhalls.closer_than(8, expansion):
+                self._scouted_expansions.remove(expansion)
+
+        if len(self._scouted_expansions) == len(self._expansion_scout_targets):
             return
 
         not_scouted_expansions = [
@@ -220,7 +226,6 @@ class ScoutController(Controller):
 
         for target in not_scouted_expansions:
             if self.ai.enemy_structures(TOWNHALL_TYPES).closer_than(8, target):
-                self._expansion_scout_targets.remove(target)
                 self._expansion_scout_units.pop(target, None)
                 self._scouted_expansions.append(target)
                 print(f"Scouted enemy expansion at {target}")
@@ -254,13 +259,19 @@ class ScoutController(Controller):
                     tag=scouting_unit.tag, role=UnitRole.CONTROL_GROUP_ONE
                 )
 
-            self.ai.register_behavior(
+            maneuver = CombatManeuver()
+            maneuver.add(
                 PathUnitToTarget(
                     unit=scouting_unit,
                     grid=self.ai.mediator.get_ground_grid,
                     target=target,
+                    success_at_distance=4,
                 )
             )
+            maneuver.add(
+                KeepUnitSafe(unit=scouting_unit, grid=self.ai.mediator.get_ground_grid)
+            )
+            self.ai.register_behavior(maneuver)
 
     def _defending_overseer(self) -> None:
         if UpgradeId.ZERGMELEEWEAPONSLEVEL1 in self.ai.completed_researches:

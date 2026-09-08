@@ -1,5 +1,6 @@
 from bot.controllers.combat.attack_controller import AttackController
 from bot.controllers.combat.defend_controller import DefendController
+from bot.controllers.combat.harass_controller import HarassController
 from bot.controllers.game_state_controller import GameStateController
 from bot.controllers.macro_controller import MacroController
 from bot.controllers.queens.creep_controller import CreepController

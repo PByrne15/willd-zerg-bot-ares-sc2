@@ -71,9 +71,9 @@ class PathUnitToTarget(CombatIndividualBehavior):
             danger_distance=self.danger_distance,
             danger_threshold=self.danger_threshold,
         )
-        if self.unit.tag in ai.unit_tags_received_action:
-            print(
-                f"ATTEMPTING TO PATH TO LOCATION WHEN ALREADY ASSIGNED AN ACTION IN THE SAME TICK with unit {self.unit} @ {ai.time_formatted}"
-            )
+        # if self.unit.tag in ai.unit_tags_received_action:
+        #     print(
+        #         f"ATTEMPTING TO PATH TO LOCATION WHEN ALREADY ASSIGNED AN ACTION IN THE SAME TICK with unit {self.unit} @ {ai.time_formatted}"
+        #     )
         self.unit.move(move_to)
         return True

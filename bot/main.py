@@ -12,6 +12,7 @@ from bot.controllers import (
     CreepController,
     DefendController,
     GameStateController,
+    HarassController,
     InjectController,
     MacroController,
     QueenController,
@@ -53,6 +54,7 @@ class WilldZergBot(AresBot):
         self.controller_list.append(ScoutController(self))
         self.controller_list.append(AttackController(self))
         self.controller_list.append(DefendController(self))
+        self.controller_list.append(HarassController(self))
         self.controller_list.append(InjectController(self))
         self.controller_list.append(CreepController(self))
         self.controller_list.append(QueenController(self))
