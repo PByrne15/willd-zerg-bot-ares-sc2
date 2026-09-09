@@ -170,7 +170,11 @@ class WilldZergBot(AresBot):
         if unit.position.distance_to(self.start_location) <= 30 or any(
             unit.position.distance_to(th) <= 10 for th in self.townhalls
         ):
-            self.controllers.set_under_attack_timer(100)
+            close_units = self.enemy_units.filter(
+                lambda u: not u.is_flying
+            ).closer_than(10, unit)
+            if close_units:
+                self.controllers.set_under_attack_timer(100)
             if unit.type_id == UnitTypeId.QUEEN:
                 self.controllers.assign_queen_defense(unit)
 

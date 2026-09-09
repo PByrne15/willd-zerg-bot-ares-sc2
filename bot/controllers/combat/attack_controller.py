@@ -193,7 +193,7 @@ class AttackController(Controller):
             workers_do_no_damage=True,
         )
 
-        if combat_sim_result in VICTORY_DECISIVE_OR_BETTER:
+        if combat_sim_result in VICTORY_DECISIVE_OR_BETTER and self._attacks >= 1:
             lings = self.ai.mediator.get_units_from_role(
                 role=UnitRole.DEFENDING, unit_type=UnitTypeId.ZERGLING
             )
