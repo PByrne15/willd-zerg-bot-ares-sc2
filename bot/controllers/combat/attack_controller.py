@@ -13,7 +13,6 @@ from ares.consts import (
     LOSS_MARGINAL_OR_WORSE,
     TOWNHALL_TYPES,
     VICTORY_CLOSE_OR_BETTER,
-    VICTORY_DECISIVE_OR_BETTER,
     EngagementResult,
     UnitRole,
 )
@@ -49,6 +48,7 @@ class AttackController(Controller):
         self._trigger_attack_time: int = -200
         self._attacks: int = 0
         self._skip_first_attack = False
+        self._stop_attack = False
 
         self._attacker_com: Point2 = Point2((0, 0))
 
@@ -129,6 +129,7 @@ class AttackController(Controller):
             if self._attacks == 1 and self._skip_first_attack:
                 print("Would be sending first attack but skipped")
                 return
+            self._stop_attack = False
             lings = self.ai.units(UnitTypeId.ZERGLING)
             self.ai.mediator.batch_assign_role(
                 tags={l.tag for l in lings}, role=UnitRole.ATTACKING_MAIN_SQUAD
@@ -193,7 +194,10 @@ class AttackController(Controller):
             workers_do_no_damage=True,
         )
 
-        if combat_sim_result in VICTORY_DECISIVE_OR_BETTER and self._attacks >= 1:
+        if combat_sim_result not in VICTORY_CLOSE_OR_BETTER:
+            self._stop_attack = True
+
+        if not self._stop_attack and self._attacks >= 1:
             lings = self.ai.mediator.get_units_from_role(
                 role=UnitRole.DEFENDING, unit_type=UnitTypeId.ZERGLING
             )
