@@ -211,7 +211,9 @@ class ScoutController(Controller):
 
     def _scout_enemy_expansions(self) -> None:
         self._start_expansion_scouting()
-        enemy_townhalls = self.ai.enemy_structures(TOWNHALL_TYPES)
+        enemy_townhalls = self.ai.enemy_structures(TOWNHALL_TYPES).filter(
+            lambda s: not s.is_flying
+        )
         for expansion in self._scouted_expansions.copy():
             if not enemy_townhalls.closer_than(8, expansion):
                 self._scouted_expansions.remove(expansion)
@@ -226,7 +228,7 @@ class ScoutController(Controller):
         ][:2]
 
         for target in not_scouted_expansions:
-            if self.ai.enemy_structures(TOWNHALL_TYPES).closer_than(8, target):
+            if enemy_townhalls.closer_than(8, target):
                 self._expansion_scout_units.pop(target, None)
                 self._expansion_scout_cooldown_until.pop(target, None)
                 self._scouted_expansions.append(target)
