@@ -149,20 +149,25 @@ class DefendController(Controller):
         if creep_position is None:
             return False
 
+        # Always engage against a single unit in order to delay and get
+        # spores up/build more queens
         can_engage = (
             combat_sim_result in TIE_OR_BETTER or air_targets.amount < 2
         ) and closest_air_target.distance_to(creep_position) <= 8
 
         for queen in defending_queens:
+            target = closest_air_target
+            if closest_air_target.distance_to(queen) > 8:
+                target = air_targets.closest_to(queen)
             maneuver: CombatManeuver = CombatManeuver()
-            if can_engage:
-                if combat_sim_result in TIE_OR_BETTER:
-                    maneuver.add(AMove(unit=queen, target=creep_position))
+            if can_engage or target.distance_to(queen) <= 8:
+                if can_engage:
+                    maneuver.add(AMove(unit=queen, target=closest_air_target))
                 else:
                     maneuver.add(
                         StutterUnitBack(
                             unit=queen,
-                            target=closest_air_target,
+                            target=target,
                             grid=ground_grid,
                         )
                     )
@@ -170,7 +175,7 @@ class DefendController(Controller):
                         PathUnitToTarget(
                             unit=queen,
                             grid=ground_grid,
-                            target=self._defend_point,
+                            target=creep_position,
                             success_at_distance=7,
                         )
                     )

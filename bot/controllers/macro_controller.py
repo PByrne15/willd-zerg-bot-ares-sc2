@@ -130,16 +130,20 @@ class MacroController(Controller):
         ):
             if self.ai.larva:
                 self.ai.larva.first.build(UnitTypeId.OVERLORD)
-        elif self.ai.structures(UnitTypeId.SPAWNINGPOOL).ready:
+        elif self.ai.structures(UnitTypeId.SPAWNINGPOOL).ready or self.ai.time > 180:
             self._macro_plan.add(AutoSupply(base_location=self.ai.start_location))
 
     def _build_spawning_pool(self) -> None:
         if self.ai.minerals > 150:
+            if self.ai.time < 180:
+                position = self.ai.mediator.get_behind_mineral_positions(
+                    th_pos=self._hq.position
+                )[0]
+            else:
+                position = self._hq.position
             self.ai.register_behavior(
                 BuildStructure(
-                    base_location=self.ai.mediator.get_behind_mineral_positions(
-                        th_pos=self._hq.position
-                    )[0],
+                    base_location=position,
                     structure_id=UnitTypeId.SPAWNINGPOOL,
                     to_count=1,
                 )
