@@ -104,6 +104,26 @@ class AttackController(Controller):
             self._cancel_rally()
 
     async def _timing_attacks(self) -> None:
+        # A wall first observed on the due frame must not preempt the attack.
+        if self.ai.actual_iteration == self._trigger_attack_time + 100:
+            self._attacks += 1
+            if self._attacks == 1 and self._skip_first_attack:
+                print("Would be sending first attack but skipped")
+                return
+            self._stop_attack = False
+            lings = self.ai.units(UnitTypeId.ZERGLING)
+            self.ai.mediator.batch_assign_role(
+                tags={l.tag for l in lings}, role=UnitRole.ATTACKING_MAIN_SQUAD
+            )
+
+            print(
+                f"Sending attack number {self._attacks} with {lings.amount} lings @ {self.ai.time_formatted}"
+            )
+            await self.ai.chat_send(
+                f"Sending timing attack number {self._attacks}", True
+            )
+            return
+
         # If we've seen a cannon or a full wall at the top of the ramp
         # we assume we won't be able to break in so skip the first timing attack
         if (
@@ -122,25 +142,6 @@ class AttackController(Controller):
         ):
             self._skip_first_attack = True
             print("Scouted a cannon, bunker, or wall so skipping first timing attack")
-            return
-
-        if self.ai.actual_iteration == self._trigger_attack_time + 100:
-            self._attacks += 1
-            if self._attacks == 1 and self._skip_first_attack:
-                print("Would be sending first attack but skipped")
-                return
-            self._stop_attack = False
-            lings = self.ai.units(UnitTypeId.ZERGLING)
-            self.ai.mediator.batch_assign_role(
-                tags={l.tag for l in lings}, role=UnitRole.ATTACKING_MAIN_SQUAD
-            )
-
-            print(
-                f"Sending attack number {self._attacks} with {lings.amount} lings @ {self.ai.time_formatted}"
-            )
-            await self.ai.chat_send(
-                f"Sending timing attack number {self._attacks}", True
-            )
 
     def _other_attacks(self) -> None:
         if self.ai.supply_used == 200 and self._attacks >= 2:

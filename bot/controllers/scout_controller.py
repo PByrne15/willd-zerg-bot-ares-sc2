@@ -356,7 +356,7 @@ class ScoutController(Controller):
 
         if self._scouting_natural:
             self._scout_for_natural()
-        elif self.enemy_nat_taken():
+        elif self.enemy_nat_taken() and self.ai.controllers.attacks:
             self._scout_enemy_expansions()
 
         self._defending_overseer()
