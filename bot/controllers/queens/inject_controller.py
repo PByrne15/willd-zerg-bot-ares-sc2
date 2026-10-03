@@ -17,6 +17,7 @@ class InjectController(Controller):
         self.ai = ai
 
         self._inject_dict: dict[int, int | None] = {}
+        self._main_th_tag: int = 0
 
     async def start(self) -> None:
         pass
@@ -45,6 +46,11 @@ class InjectController(Controller):
             if queen.tag == q:
                 self._inject_dict[th] = None
 
+    def get_main_inject_queen_tag(self) -> int:
+        if self._main_th_tag not in self._inject_dict:
+            return 0
+        return self._inject_dict[self._main_th_tag] or 0
+
     def _maybe_build_queen(self, th: Unit) -> None:
         # This is surprisingly painful for performance so only do it every 10 iterations
         if self.ai.actual_iteration % 10:
@@ -62,6 +68,9 @@ class InjectController(Controller):
 
     async def update(self) -> None:
         ths = [th for th in self.ai.townhalls]
+        if not self._main_th_tag and ths:
+            self._main_th_tag = ths[0].tag
+
         # add any new townhalls
         for th in ths:
             if th.tag not in self._inject_dict and th.is_ready:

@@ -278,13 +278,23 @@ class DefendController(Controller):
                 self._engaging[tag] = False
 
         if not self._engaging[tag]:
-            if proxy_buildings:
+            if (
+                proxy_buildings
+                and defenders.filter(lambda d: d.type_id is UnitTypeId.ZERGLING).amount
+                >= 12
+                and defender.type_id is not UnitTypeId.QUEEN
+            ):
                 proxy = proxy_buildings.closest_to(defender)
-                maneuver.add(AMove(unit=defender, target=proxy.position))
+                maneuver.add(
+                    AMove(unit=defender, target=proxy.position, success_at_distance=0)
+                )
             maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
             maneuver.add(
                 PathUnitToTarget(
-                    unit=defender, grid=ground_grid, target=self._defend_point
+                    unit=defender,
+                    grid=ground_grid,
+                    target=self._defend_point,
+                    success_at_distance=5,
                 )
             )
 
@@ -343,7 +353,6 @@ class DefendController(Controller):
         ).amount
 
         defense_location = self._defend_point
-        success_at_distance = 2
         if (
             not self.ai.townhalls
             or (
@@ -363,7 +372,6 @@ class DefendController(Controller):
             self._engaging[tag] = True
             if closest_enemy_unit.type_id in CHANGELING_TYPES:
                 defense_location = closest_enemy_unit
-                success_at_distance = 0
             else:
                 defense_location = closest_enemy_unit.position
         else:
@@ -375,7 +383,7 @@ class DefendController(Controller):
             AMove(
                 unit=defender,
                 target=defense_location,
-                success_at_distance=success_at_distance,
+                success_at_distance=0,
             )
         )
         self.ai.register_behavior(maneuver)

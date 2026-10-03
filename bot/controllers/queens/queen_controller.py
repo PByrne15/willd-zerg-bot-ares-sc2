@@ -75,6 +75,12 @@ class QueenController(Controller):
         inject_queens = self.ai.mediator.get_units_from_role(
             role=UnitRole.QUEEN_INJECT, unit_type=UnitTypeId.QUEEN
         )
+        if (
+            self.ai.mediator.get_own_unit_count(unit_type_id=UnitTypeId.QUEEN)
+            > self.ai.townhalls.amount
+        ):
+            main_queen_tag = self.ai.controllers.get_main_inject_queen_tag()
+            inject_queens = [q for q in inject_queens if q.tag != main_queen_tag]
         if inject_queens:
             print(f"Changing inject queens to defensive @ {self.ai.time_formatted}")
         for q in inject_queens:

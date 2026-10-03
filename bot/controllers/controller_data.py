@@ -89,6 +89,9 @@ class ControllerData:
     def remove_inject_queen(self, queen: Unit) -> None:
         return self.interfaces["remove_inject_queen"](queen)
 
+    def get_main_inject_queen_tag(self) -> int:
+        return self.interfaces["get_main_inject_queen_tag"]()
+
     # CreepController interfaces
     def add_creep_queen(self, queen: Unit) -> bool:
         return self.interfaces["add_creep_queen"](queen)
