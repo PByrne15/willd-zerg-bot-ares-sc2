@@ -238,7 +238,11 @@ class DefendController(Controller):
         return proxy_buildings
 
     def _default_defensive_behaviour(
-        self, defender: Unit, defenders: Units, ground_grid: np.ndarray
+        self,
+        defender: Unit,
+        defenders: Units,
+        proxy_buildings: Units,
+        ground_grid: np.ndarray,
     ) -> None:
         tag = defender.tag
         maneuver: CombatManeuver = CombatManeuver()
@@ -247,12 +251,6 @@ class DefendController(Controller):
             not self._engaging[tag]
             or UpgradeId.ZERGLINGMOVEMENTSPEED not in self.ai.completed_researches
         ):
-            maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
-            maneuver.add(
-                PathUnitToTarget(
-                    unit=defender, grid=ground_grid, target=self._defend_point
-                )
-            )
             self._engaging[tag] = False
         else:
             enemies = self.ai.enemy_units.filter(
@@ -279,13 +277,16 @@ class DefendController(Controller):
             else:
                 self._engaging[tag] = False
 
-            if not self._engaging[tag]:
-                maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
-                maneuver.add(
-                    PathUnitToTarget(
-                        unit=defender, grid=ground_grid, target=self._defend_point
-                    )
+        if not self._engaging[tag]:
+            if proxy_buildings:
+                proxy = proxy_buildings.closest_to(defender)
+                maneuver.add(AMove(unit=defender, target=proxy.position))
+            maneuver.add(KeepUnitSafe(unit=defender, grid=ground_grid))
+            maneuver.add(
+                PathUnitToTarget(
+                    unit=defender, grid=ground_grid, target=self._defend_point
                 )
+            )
 
         self.ai.register_behavior(maneuver)
 
@@ -454,8 +455,11 @@ class DefendController(Controller):
         if not close_ground_units:
             self._staging_area = self._defend_point
             self._close_units_com_history.clear()
+            proxy_buildings = self._get_proxy_buildings()
             for defender in defenders_this_iteration:
-                self._default_defensive_behaviour(defender, defenders, ground_grid)
+                self._default_defensive_behaviour(
+                    defender, defenders, proxy_buildings, ground_grid
+                )
             return
 
         close_units_com = self._get_close_unit_com(close_ground_units)
