@@ -379,7 +379,7 @@ class MacroController(Controller):
         if self.ai.controllers.being_spine_rushed or (
             self.ai.mediator.get_enemy_worker_rushed and self.ai.time < 210
         ):
-            enemy_structs = self.ai.enemy_structures()
+            enemy_structs = self.ai.enemy_structures
             if enemy_structs and enemy_structs.closer_than(20, self.ai.start_location):
                 enemy_proxy = enemy_structs.closer_than(
                     20, self.ai.start_location
